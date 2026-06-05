@@ -1,6 +1,6 @@
 # Orbit Wars Progress
 
-Last updated: 2026-06-05
+Last updated: 2026-06-06
 
 ## Current Status
 
@@ -28,13 +28,18 @@ Last updated: 2026-06-05
 
 ## Next Step
 
-Build the next bot iteration with:
+Evaluate the opening-mode version on Kaggle, then build the next bot iteration with:
 
-- Rotation-aware targeting
-- Sun-crossing avoidance
 - Better enemy attack and reinforcement decisions
+- Early defense of newly captured planets
+- Follow-up analysis from fresh 1v1 replays
 
 Keep using `evaluate.py` to measure each change.
+
+## Working Notes
+
+- High-level status lives in this file.
+- Change-by-change intent and evidence live in [EXPERIMENT_LOG.md](C:/Users/yuu98/Desktop/kaggle/orbit-wars/EXPERIMENT_LOG.md:1).
 
 ## Latest Results
 
@@ -141,5 +146,4 @@ Current command:
 
 ## Notes
 
-- The current highest-priority missing piece is the local evaluation harness.
 - All future bot changes should be judged against repeatable seed-based results, not intuition alone.
