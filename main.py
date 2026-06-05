@@ -44,6 +44,14 @@ def reserve_ships(planet):
     return max(6, planet.production * 3)
 
 
+def dynamic_reserve_ships(planet, current_step):
+    if current_step < 80:
+        return max(3, planet.production * 2)
+    if current_step < 160:
+        return max(5, planet.production * 2)
+    return reserve_ships(planet)
+
+
 def is_rotating(planet):
     orbital_radius = distance_xy(planet.x, planet.y, CENTER_X, CENTER_Y)
     return orbital_radius + planet.radius < 50.0
@@ -117,6 +125,15 @@ def target_score(source, target, committed_ships, current_step, angular_velocity
     enemy_penalty = 14.0 if target.owner != -1 else 0.0
     sun_penalty = 40.0 if crosses_sun(source, target_x, target_y) else 0.0
 
+    if target.owner == -1 and current_step < 80:
+        value += 18.0
+        if target.production >= 4:
+            value += 30.0
+        time_cost *= 0.8
+
+    if target.owner == -1 and current_step < 140 and dist < 28:
+        value += 12.0
+
     return value - capture_cost - time_cost - enemy_penalty - sun_penalty
 
 
@@ -139,7 +156,7 @@ def agent(obs):
         return moves
 
     for mine in sorted(my_planets, key=lambda planet: planet.ships, reverse=True):
-        available = mine.ships - reserve_ships(mine)
+        available = mine.ships - dynamic_reserve_ships(mine, current_step)
         if available <= 0:
             continue
 
@@ -168,7 +185,8 @@ def agent(obs):
                 best_target = target
                 best_needed = needed
 
-        if best_target is None or best_score <= 0:
+        early_expand = current_step < 80 and best_target is not None and best_target.owner == -1
+        if best_target is None or (best_score <= 0 and not early_expand):
             continue
 
         target_x, target_y, _ = predict_intercept_position(

@@ -50,6 +50,16 @@ Keep using `evaluate.py` to measure each change.
 - Win rate: `100%`
 - Average score diff: `+18869.60`
 - Crash rate: `0%`
+- V2.1 early-expansion bot vs `random` over 20 games:
+- Win rate: `100%`
+- Average score diff: `+18692.35`
+- Crash rate: `0%`
+
+## Latest Replay Insight
+
+- A real 1v1 loss showed that the bot was too passive early.
+- By turn `50`, the opponent had already expanded to `7` planets while we were stuck on `4`.
+- The next adjustment reduced early reserves and pushed harder for neutral expansion before turn `80`.
 
 ## Evaluation Script
 
