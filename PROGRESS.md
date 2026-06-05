@@ -13,11 +13,11 @@ Last updated: 2026-06-05
 - [x] Starter `main.py` verified against `random`
 - [x] Multi-seed local evaluation script created
 - [x] V1 bot implemented
-- [ ] Rotation-aware targeting implemented
-- [ ] Sun-safe routing implemented
+- [x] Rotation-aware targeting implemented
+- [x] Sun-safe routing implemented
 - [ ] Defense and reinforcement logic implemented
 - [ ] Endgame mode implemented
-- [ ] Kaggle submission loop started
+- [x] Kaggle submission loop started
 - [ ] Final two submissions selected
 
 ## Current Environment
@@ -45,6 +45,10 @@ Keep using `evaluate.py` to measure each change.
 - Updated V1 bot vs `random` over 20 games:
 - Win rate: `95%`
 - Average score diff: `+13069.95`
+- Crash rate: `0%`
+- Updated V2 bot vs `random` over 20 games:
+- Win rate: `100%`
+- Average score diff: `+18869.60`
 - Crash rate: `0%`
 
 ## Evaluation Script
