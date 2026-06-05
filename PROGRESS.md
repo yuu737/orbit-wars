@@ -63,6 +63,10 @@ Keep using `evaluate.py` to measure each change.
 - Win rate: `100%`
 - Average score diff: `+19040.00`
 - Crash rate: `0%`
+- V2.3 reinforcement bot vs `random` over 20 games:
+- Win rate: `100%`
+- Average score diff: `+21767.65`
+- Crash rate: `0%`
 
 ## Latest Replay Insight
 

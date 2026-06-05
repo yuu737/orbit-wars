@@ -52,6 +52,15 @@ def dynamic_reserve_ships(planet, current_step):
     return reserve_ships(planet)
 
 
+def desired_garrison(planet, current_step):
+    base = planet.production * 4 + 4
+    if current_step < 90:
+        return max(6, planet.production * 3)
+    if current_step < 180:
+        return max(base, planet.production * 5)
+    return max(base + 4, planet.production * 6)
+
+
 def is_rotating(planet):
     orbital_radius = distance_xy(planet.x, planet.y, CENTER_X, CENTER_Y)
     return orbital_radius + planet.radius < 50.0
@@ -170,6 +179,23 @@ def opening_target_score(source, target, current_step, angular_velocity, initial
     return score, (target_x, target_y, needed)
 
 
+def reinforcement_score(source, target, current_step, angular_velocity, initial_planet, comet_ids, ships):
+    target_x, target_y, travel_time = predict_intercept_position(
+        source, target, initial_planet, current_step, angular_velocity, comet_ids, ships
+    )
+    if crosses_sun(source, target_x, target_y):
+        return float("-inf"), None
+
+    dist = distance_xy(source.x, source.y, target_x, target_y)
+    score = target.production * 20.0 - dist * 0.9 - travel_time * 2.0 - target.ships * 0.6
+    if target.production >= 4:
+        score += 18.0
+    if target.ships <= 8:
+        score += 24.0
+
+    return score, (target_x, target_y)
+
+
 def agent(obs):
     player = obs.get("player", 0) if isinstance(obs, dict) else obs.player
     raw_planets = obs.get("planets", []) if isinstance(obs, dict) else obs.planets
@@ -182,6 +208,7 @@ def agent(obs):
 
     my_planets = [planet for planet in planets if planet.owner == player]
     targets = [planet for planet in planets if planet.owner != player]
+    reinforcement_targets = [planet for planet in my_planets if planet.ships < desired_garrison(planet, current_step)]
     target_commits = {}
     moves = []
 
@@ -192,6 +219,55 @@ def agent(obs):
         available = mine.ships - dynamic_reserve_ships(mine, current_step)
         if available <= 0:
             continue
+
+        best_ally = None
+        best_ally_score = float("-inf")
+        best_ally_data = None
+        for ally in reinforcement_targets:
+            if ally.id == mine.id:
+                continue
+
+            deficit = desired_garrison(ally, current_step) - ally.ships
+            if deficit <= 0:
+                continue
+
+            send_amount = min(available, max(4, min(deficit, available // 2 if available >= 8 else available)))
+            if send_amount <= 0:
+                continue
+
+            score, data = reinforcement_score(
+                mine,
+                ally,
+                current_step,
+                angular_velocity,
+                initial_planets.get(ally.id),
+                comet_ids,
+                send_amount,
+            )
+            if score > best_ally_score:
+                best_ally = ally
+                best_ally_score = score
+                best_ally_data = (data, send_amount)
+
+        if best_ally is not None and best_ally_score > 12:
+            (target_x, target_y), send_amount = best_ally_data
+            angle = math.atan2(target_y - mine.y, target_x - mine.x)
+            moves.append([mine.id, angle, int(send_amount)])
+            available -= send_amount
+            reinforcement_targets = [
+                planet if planet.id != best_ally.id else Planet(
+                    best_ally.id,
+                    best_ally.owner,
+                    best_ally.x,
+                    best_ally.y,
+                    best_ally.radius,
+                    best_ally.ships + send_amount,
+                    best_ally.production,
+                )
+                for planet in reinforcement_targets
+            ]
+            if available <= 0:
+                continue
 
         if current_step < 90:
             opening_best = None

@@ -158,3 +158,29 @@ Decision:
 Next:
 - Evaluate this version on Kaggle and inspect whether early planet count closes the gap.
 - If the opening improves, move next to defense and reinforcement logic.
+
+## 2026-06-06 - V2.3 reinforcement pass
+
+Goal:
+- Stop newly captured or high-production planets from staying dangerously thin.
+
+Change:
+- Added a desired garrison target that scales by planet production and game phase.
+- Added a simple reinforcement pass before attack selection.
+- Allowed strong planets to send modest support to weak owned planets when the route is safe.
+
+Local evidence:
+- `random` over 20 games
+- Win rate: `100%`
+- Average score diff: `+21767.65`
+- Crash rate: `0%`
+
+Kaggle evidence:
+- Not submitted yet.
+
+Decision:
+- Keep and test on Kaggle.
+
+Next:
+- Submit this version and inspect whether midgame collapses become less common.
+- If replays still show losses after expansion, add enemy-aware defense rather than generic reinforcement only.
