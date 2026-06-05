@@ -176,11 +176,15 @@ Local evidence:
 - Crash rate: `0%`
 
 Kaggle evidence:
-- Not submitted yet.
+- Not submitted.
+- Head-to-head against `v2.2` over 20 games and both seats:
+- Win rate: `30%`
+- Average score diff: `-4432.25`
 
 Decision:
-- Keep and test on Kaggle.
+- Rejected as the main line.
 
 Next:
-- Submit this version and inspect whether midgame collapses become less common.
-- If replays still show losses after expansion, add enemy-aware defense rather than generic reinforcement only.
+- Keep the self-play comparison harness.
+- Use `v2.2` as the active submission baseline.
+- Revisit defense later with enemy-aware logic instead of generic reinforcement first.

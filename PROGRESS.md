@@ -40,6 +40,8 @@ Keep using `evaluate.py` to measure each change.
 
 - High-level status lives in this file.
 - Change-by-change intent and evidence live in [EXPERIMENT_LOG.md](C:/Users/yuu98/Desktop/kaggle/orbit-wars/EXPERIMENT_LOG.md:1).
+- `random` is now a sanity check, not a promotion gate.
+- Head-to-head against earlier snapshots is required before treating a change as stronger.
 
 ## Latest Results
 
@@ -67,6 +69,10 @@ Keep using `evaluate.py` to measure each change.
 - Win rate: `100%`
 - Average score diff: `+21767.65`
 - Crash rate: `0%`
+- V2.3 vs `v2.2` over 20 games and both seats:
+- Win rate: `30%`
+- Average score diff: `-4432.25`
+- Decision: `rejected`
 
 ## Latest Replay Insight
 
@@ -151,3 +157,4 @@ Current command:
 ## Notes
 
 - All future bot changes should be judged against repeatable seed-based results, not intuition alone.
+- Snapshot comparisons should be run before new Kaggle submissions when possible.

@@ -38,6 +38,11 @@ def parse_args() -> argparse.Namespace:
         choices=(0, 1),
         help="Seat index for the primary agent. Default: 0",
     )
+    parser.add_argument(
+        "--both-seats",
+        action="store_true",
+        help="Run each seed twice, once from each seat.",
+    )
     return parser.parse_args()
 
 
@@ -139,17 +144,22 @@ def main() -> None:
     make = load_environment()
 
     results = []
-    for offset in range(args.games):
-        seed = args.seed_start + offset
-        results.append(
-            run_game(
-                make=make,
-                seed=seed,
-                primary_agent=args.agent,
-                opponent_agent=args.opponent,
-                player_index=args.player_index,
+    seat_indices = [args.player_index]
+    if args.both_seats:
+        seat_indices = [0, 1]
+
+    for seat_index in seat_indices:
+        for offset in range(args.games):
+            seed = args.seed_start + offset
+            results.append(
+                run_game(
+                    make=make,
+                    seed=seed,
+                    primary_agent=args.agent,
+                    opponent_agent=args.opponent,
+                    player_index=seat_index,
+                )
             )
-        )
 
     print(summarize(results))
 
