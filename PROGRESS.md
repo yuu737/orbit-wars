@@ -12,7 +12,7 @@ Last updated: 2026-06-05
 - [x] `kaggle-environments` available in the local runner environment
 - [x] Starter `main.py` verified against `random`
 - [x] Multi-seed local evaluation script created
-- [ ] V1 bot implemented
+- [x] V1 bot implemented
 - [ ] Rotation-aware targeting implemented
 - [ ] Sun-safe routing implemented
 - [ ] Defense and reinforcement logic implemented
@@ -27,6 +27,27 @@ Last updated: 2026-06-05
 - Remote repository: `https://github.com/yuu737/orbit-wars`
 
 ## Next Step
+
+Build the next bot iteration with:
+
+- Rotation-aware targeting
+- Sun-crossing avoidance
+- Better enemy attack and reinforcement decisions
+
+Keep using `evaluate.py` to measure each change.
+
+## Latest Results
+
+- Starter bot vs `random` over 20 games:
+- Win rate: `70%`
+- Average score diff: `+1621.75`
+- Crash rate: `0%`
+- Updated V1 bot vs `random` over 20 games:
+- Win rate: `95%`
+- Average score diff: `+13069.95`
+- Crash rate: `0%`
+
+## Evaluation Script
 
 Use `evaluate.py` to run `main.py` across multiple seeds and report:
 
