@@ -45,8 +45,8 @@ def reserve_ships(planet):
 
 
 def dynamic_reserve_ships(planet, current_step):
-    if current_step < 80:
-        return max(3, planet.production * 2)
+    if current_step < 90:
+        return max(2, planet.production)
     if current_step < 160:
         return max(5, planet.production * 2)
     return reserve_ships(planet)
@@ -137,6 +137,39 @@ def target_score(source, target, committed_ships, current_step, angular_velocity
     return value - capture_cost - time_cost - enemy_penalty - sun_penalty
 
 
+def opening_target_score(source, target, current_step, angular_velocity, initial_planet, comet_ids, committed_ships):
+    if target.owner != -1:
+        return float("-inf"), None
+
+    needed = ships_needed_to_capture(target) - committed_ships
+    if needed <= 0:
+        return float("-inf"), None
+
+    target_x, target_y, travel_time = predict_intercept_position(
+        source, target, initial_planet, current_step, angular_velocity, comet_ids, needed
+    )
+    if crosses_sun(source, target_x, target_y):
+        return float("-inf"), None
+
+    dist = distance_xy(source.x, source.y, target_x, target_y)
+    if dist > 38:
+        return float("-inf"), None
+
+    # Opening mode cares more about fast, cheap expansion than perfect long-term ROI.
+    score = 0.0
+    score += target.production * 30.0
+    score -= needed * 2.4
+    score -= travel_time * 3.0
+    if target.production >= 4:
+        score += 35.0
+    if target.ships <= 12:
+        score += 18.0
+    if dist <= 22:
+        score += 16.0
+
+    return score, (target_x, target_y, needed)
+
+
 def agent(obs):
     player = obs.get("player", 0) if isinstance(obs, dict) else obs.player
     raw_planets = obs.get("planets", []) if isinstance(obs, dict) else obs.planets
@@ -159,6 +192,41 @@ def agent(obs):
         available = mine.ships - dynamic_reserve_ships(mine, current_step)
         if available <= 0:
             continue
+
+        if current_step < 90:
+            opening_best = None
+            opening_data = None
+            opening_score = float("-inf")
+
+            for target in targets:
+                committed = target_commits.get(target.id, 0)
+                score, data = opening_target_score(
+                    mine,
+                    target,
+                    current_step,
+                    angular_velocity,
+                    initial_planets.get(target.id),
+                    comet_ids,
+                    committed,
+                )
+                if data is None:
+                    continue
+
+                _, _, needed = data
+                if needed > available:
+                    continue
+
+                if score > opening_score:
+                    opening_score = score
+                    opening_best = target
+                    opening_data = data
+
+            if opening_best is not None and opening_score > -8:
+                target_x, target_y, needed = opening_data
+                angle = math.atan2(target_y - mine.y, target_x - mine.x)
+                moves.append([mine.id, angle, int(needed)])
+                target_commits[opening_best.id] = target_commits.get(opening_best.id, 0) + needed
+                continue
 
         best_target = None
         best_needed = None

@@ -54,12 +54,18 @@ Keep using `evaluate.py` to measure each change.
 - Win rate: `100%`
 - Average score diff: `+18692.35`
 - Crash rate: `0%`
+- V2.2 opening-mode bot vs `random` over 20 games:
+- Win rate: `100%`
+- Average score diff: `+19040.00`
+- Crash rate: `0%`
 
 ## Latest Replay Insight
 
 - A real 1v1 loss showed that the bot was too passive early.
 - By turn `50`, the opponent had already expanded to `7` planets while we were stuck on `4`.
 - The next adjustment reduced early reserves and pushed harder for neutral expansion before turn `80`.
+- A second real 1v1 loss showed an even slower opening, with us still on `1` planet at turn `25`.
+- The next adjustment added an explicit opening mode that prioritizes cheap nearby neutral planets before turn `90`.
 
 ## Evaluation Script
 
