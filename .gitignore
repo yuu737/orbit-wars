@@ -4,8 +4,18 @@ __pycache__/
 .venv/
 venv/
 
+data/
+downloads/
+inputs/
+outputs/
 replays/
 logs/
+checkpoints/
+artifacts/
+submissions/
+
+.env
+.python-version
 
 .DS_Store
 Thumbs.db
