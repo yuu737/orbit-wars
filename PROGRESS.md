@@ -73,6 +73,14 @@ Keep using `evaluate.py` to measure each change.
 - Win rate: `30%`
 - Average score diff: `-4432.25`
 - Decision: `rejected`
+- V2.4 threat-aware defense vs `random` over 20 games and both seats:
+- Win rate: `100%`
+- Average score diff: `+20796.00`
+- Crash rate: `0%`
+- V2.4 vs `v2.2` over 20 games and both seats:
+- Win rate: `20%`
+- Average score diff: `-7883.70`
+- Decision: `rejected`
 
 ## Latest Replay Insight
 

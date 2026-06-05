@@ -8,7 +8,7 @@ This version upgrades the starter bot with three simple ideas:
 """
 
 import math
-from kaggle_environments.envs.orbit_wars.orbit_wars import Planet
+from kaggle_environments.envs.orbit_wars.orbit_wars import Fleet, Planet
 
 
 MAX_SPEED = 6.0
@@ -35,6 +35,11 @@ def distance_xy(ax, ay, bx, by):
     return math.hypot(ax - bx, ay - by)
 
 
+def angle_diff(a, b):
+    diff = (a - b + math.pi) % (2 * math.pi) - math.pi
+    return abs(diff)
+
+
 def ships_needed_to_capture(target):
     return target.ships + 1
 
@@ -50,6 +55,15 @@ def dynamic_reserve_ships(planet, current_step):
     if current_step < 160:
         return max(5, planet.production * 2)
     return reserve_ships(planet)
+
+
+def desired_garrison(planet, current_step):
+    base = planet.production * 4 + 4
+    if current_step < 90:
+        return max(6, planet.production * 3)
+    if current_step < 180:
+        return max(base, planet.production * 5)
+    return max(base + 4, planet.production * 6)
 
 
 def is_rotating(planet):
@@ -169,6 +183,51 @@ def opening_target_score(source, target, current_step, angular_velocity, initial
     return score, (target_x, target_y, needed)
 
 
+def estimate_incoming_pressure(planet, fleets, player):
+    friendly = 0
+    enemy = 0
+    for fleet in fleets:
+        dist = distance_xy(fleet.x, fleet.y, planet.x, planet.y)
+        if dist > 44:
+            continue
+
+        heading = math.atan2(planet.y - fleet.y, planet.x - fleet.x)
+        if angle_diff(fleet.angle, heading) > 0.45:
+            continue
+
+        pressure = max(0, fleet.ships - int(dist * 0.2))
+        if pressure <= 0:
+            continue
+
+        if fleet.owner == player:
+            friendly += pressure
+        else:
+            enemy += pressure
+
+    return friendly, enemy
+
+
+def find_threatened_planets(my_planets, fleets, player, current_step):
+    threatened = []
+    for planet in my_planets:
+        desired = desired_garrison(planet, current_step)
+        friendly_incoming, enemy_incoming = estimate_incoming_pressure(planet, fleets, player)
+        deficit = desired + enemy_incoming - (planet.ships + friendly_incoming)
+        if deficit > 0:
+            threatened.append((planet, deficit))
+    return threatened
+
+
+def defense_priority(source, target, deficit):
+    dist = distance(source, target)
+    score = target.production * 22.0 - dist * 1.1 + deficit * 1.7
+    if target.production >= 4:
+        score += 18.0
+    if target.ships <= 8:
+        score += 16.0
+    return score
+
+
 def agent(obs):
     player = obs.get("player", 0) if isinstance(obs, dict) else obs.player
     raw_planets = obs.get("planets", []) if isinstance(obs, dict) else obs.planets
@@ -177,10 +236,13 @@ def agent(obs):
     current_step = obs.get("step", 0) if isinstance(obs, dict) else obs.step
     comet_ids = set(obs.get("comet_planet_ids", [])) if isinstance(obs, dict) else set(obs.comet_planet_ids)
     planets = [Planet(*p) for p in raw_planets]
+    raw_fleets = obs.get("fleets", []) if isinstance(obs, dict) else obs.fleets
+    fleets = [Fleet(*f) for f in raw_fleets]
     initial_planets = {planet.id: planet for planet in (Planet(*p) for p in raw_initial_planets)}
 
     my_planets = [planet for planet in planets if planet.owner == player]
     targets = [planet for planet in planets if planet.owner != player]
+    threatened_planets = find_threatened_planets(my_planets, fleets, player, current_step)
     target_commits = {}
     moves = []
 
@@ -191,6 +253,39 @@ def agent(obs):
         available = mine.ships - dynamic_reserve_ships(mine, current_step)
         if available <= 0:
             continue
+
+        defense_best = None
+        defense_score = float("-inf")
+        defense_send = 0
+        for ally, deficit in threatened_planets:
+            if ally.id == mine.id:
+                continue
+
+            send_amount = min(available, max(4, min(deficit, available)))
+            if send_amount <= 0:
+                continue
+
+            score = defense_priority(mine, ally, deficit)
+            if score > defense_score:
+                defense_best = ally
+                defense_score = score
+                defense_send = send_amount
+
+        if defense_best is not None and defense_score > 18:
+            angle = math.atan2(defense_best.y - mine.y, defense_best.x - mine.x)
+            moves.append([mine.id, angle, int(defense_send)])
+            available -= defense_send
+            next_threats = []
+            for planet, deficit in threatened_planets:
+                if planet.id == defense_best.id:
+                    updated = max(0, deficit - defense_send)
+                    if updated > 0:
+                        next_threats.append((planet, updated))
+                else:
+                    next_threats.append((planet, deficit))
+            threatened_planets = next_threats
+            if available <= 0:
+                continue
 
         if current_step < 90:
             opening_best = None

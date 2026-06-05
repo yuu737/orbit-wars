@@ -188,3 +188,32 @@ Next:
 - Keep the self-play comparison harness.
 - Use `v2.2` as the active submission baseline.
 - Revisit defense later with enemy-aware logic instead of generic reinforcement first.
+
+## 2026-06-06 - V2.4 threat-aware defense
+
+Goal:
+- Stop midgame collapses by defending planets that appear to be directly threatened by enemy fleets.
+
+Change:
+- Estimated incoming pressure from nearby fleets that are roughly aligned with owned planets.
+- Prioritized reinforcement only for planets with a predicted deficit against that pressure.
+
+Local evidence:
+- `random` over 20 games and both seats
+- Win rate: `100%`
+- Average score diff: `+20796.00`
+- Crash rate: `0%`
+- Head-to-head against `v2.2` over 20 games and both seats
+- Win rate: `20%`
+- Average score diff: `-7883.70`
+
+Kaggle evidence:
+- Not submitted.
+
+Decision:
+- Rejected as the main line.
+
+Next:
+- Keep the snapshot for reference.
+- Continue from `v2.2` as the active baseline.
+- Try enemy-aware defense again only with tighter constraints or better threat targeting.
