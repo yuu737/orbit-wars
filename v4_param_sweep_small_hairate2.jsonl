@@ -1,0 +1,3 @@
+{"avg_best_opponent_score": 1053.0, "avg_placement": 2.0, "avg_primary_score": 0.0, "avg_score_diff": -1053.0, "avg_survival_turn": 89.0, "games": 4, "name": "base", "variant": {"name": "base"}, "win_rate": 0.0, "wins": 0}
+{"avg_best_opponent_score": 715.0, "avg_placement": 2.0, "avg_primary_score": 0.0, "avg_score_diff": -715.0, "avg_survival_turn": 81.0, "games": 4, "name": "guarded", "variant": {"name": "guarded", "reserve_margin": 4, "roi_threshold": 1.8}, "win_rate": 0.0, "wins": 0}
+{"avg_best_opponent_score": 640.5, "avg_placement": 2.0, "avg_primary_score": 0.0, "avg_score_diff": -640.5, "avg_survival_turn": 73.0, "games": 4, "name": "growth", "variant": {"max_targets": 14, "name": "growth", "roi_threshold": 1.2}, "win_rate": 0.0, "wins": 0}

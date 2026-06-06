@@ -12,6 +12,7 @@ Last updated: 2026-06-06
 - [x] `kaggle-environments` available in the local runner environment
 - [x] Starter `main.py` verified against `random`
 - [x] Multi-seed local evaluation script created
+- [x] Parallel local evaluation added
 - [x] V1 bot implemented
 - [x] Rotation-aware targeting implemented
 - [x] Sun-safe routing implemented
@@ -28,11 +29,11 @@ Last updated: 2026-06-06
 
 ## Next Step
 
-Evaluate the opening-mode version on Kaggle, then build the next bot iteration with:
+Evaluate new bot candidates in both 2-player and 4-player setups, then build the next bot iteration with:
 
 - Better enemy attack and reinforcement decisions
 - Early defense of newly captured planets
-- Follow-up analysis from fresh 1v1 replays
+- Follow-up analysis from fresh replay losses in both formats
 
 Keep using `evaluate.py` to measure each change.
 
@@ -99,9 +100,17 @@ Use `evaluate.py` to run `main.py` across multiple seeds and report:
 - Crash rate
 - Average game length
 
-Current command:
+Current 2-player sanity-check command:
 
 `C:\tmp\ow\Scripts\python.exe evaluate.py --agent main.py --opponent random --games 20`
+
+Fast 2-player self-play command:
+
+`C:\tmp\ow\Scripts\python.exe evaluate.py --agent main.py --opponent bots\v2_2_opening_mode.py --games 20 --both-seats --workers 8`
+
+Fast 4-player command:
+
+`C:\tmp\ow\Scripts\python.exe evaluate.py --agent main.py --players 4 --opponent random --games 10 --both-seats --workers 8`
 
 ## Roadmap
 

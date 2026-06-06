@@ -1,0 +1,4 @@
+{"avg_best_opponent_score": 1053.0, "avg_placement": 2.0, "avg_primary_score": 0.0, "avg_score_diff": -1053.0, "avg_survival_turn": 89.0, "games": 4, "name": "base", "variant": {"name": "base"}, "win_rate": 0.0, "wins": 0}
+{"avg_best_opponent_score": 997.5, "avg_placement": 2.0, "avg_primary_score": 0.0, "avg_score_diff": -997.5, "avg_survival_turn": 88.0, "games": 4, "name": "roi1.2", "variant": {"name": "roi1.2", "roi_threshold": 1.2}, "win_rate": 0.0, "wins": 0}
+{"avg_best_opponent_score": 1053.0, "avg_placement": 2.0, "avg_primary_score": 0.0, "avg_score_diff": -1053.0, "avg_survival_turn": 89.0, "games": 4, "name": "roi1.8", "variant": {"name": "roi1.8", "roi_threshold": 1.8}, "win_rate": 0.0, "wins": 0}
+{"avg_best_opponent_score": 785.5, "avg_placement": 2.0, "avg_primary_score": 0.0, "avg_score_diff": -785.5, "avg_survival_turn": 81.5, "games": 4, "name": "roi2.2", "variant": {"name": "roi2.2", "roi_threshold": 2.2}, "win_rate": 0.0, "wins": 0}

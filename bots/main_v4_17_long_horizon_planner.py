@@ -1,0 +1,1015 @@
+"""
+Orbit Wars - V4.17 Long Horizon Planner Candidate
+
+Self-owned planner-style branch inspired by the structure of strong public bots,
+but implemented independently:
+- Project short-horizon planet ownership/garrisons.
+- Compute safe source drain from the projection.
+- Build attack/defense/regroup candidates.
+- Add reactive counter-snipe candidates against enemy neutral captures.
+- Select non-conflicting candidates greedily.
+
+Submission candidate settings:
+- Adds longer-horizon opening neutral expansion.
+- Adds direct-threat reserve bonus and stronger projected defense scoring.
+- Keeps planner/greedy structure for long-term tuning.
+"""
+
+import math
+from dataclasses import dataclass
+
+from kaggle_environments.envs.orbit_wars.orbit_wars import Fleet, Planet
+
+
+MAX_SPEED = 6.0
+CENTER_X = 50.0
+CENTER_Y = 50.0
+SUN_RADIUS = 10.0
+SUN_MARGIN = 1.0
+END_STEP = 500
+
+
+@dataclass(frozen=True)
+class PlannerConfig:
+    horizon: int = 18
+    max_sources: int = 10
+    max_targets: int = 12
+    max_actions: int = 6
+    roi_threshold: float = 1.5
+    min_ships_to_launch: int = 4
+    regroup_enabled: bool = True
+    regroup_distance: float = 7.0
+    regroup_threshold: float = 9.0
+    reserve_margin: int = 2
+    opening_horizon: int = 32
+    opening_max_cost: int = 28
+    direct_threat_horizon: int = 22
+    hold_margin: int = 3
+    strategic_horizon: int = 70
+    consolidation_step: int = 180
+
+
+CONFIG_2P = PlannerConfig(roi_threshold=2.2)
+CONFIG_4P = PlannerConfig(
+    horizon=13,
+    max_sources=6,
+    max_targets=10,
+    max_actions=5,
+    roi_threshold=2.2,
+    regroup_distance=6.0,
+    regroup_threshold=11.0,
+    reserve_margin=3,
+    opening_horizon=24,
+    opening_max_cost=22,
+    direct_threat_horizon=16,
+    hold_margin=4,
+    strategic_horizon=52,
+    consolidation_step=145,
+)
+
+
+@dataclass
+class Projection:
+    owner_by_id: dict[int, list[int]]
+    ships_by_id: dict[int, list[int]]
+    incoming_by_id: dict[int, list[dict[int, int]]]
+    first_loss_turn_by_id: dict[int, int | None]
+
+
+@dataclass
+class Candidate:
+    kind: str
+    source_id: int
+    target_id: int
+    angle: float
+    ships: int
+    eta: float
+    score: float
+
+
+def fleet_speed(ships):
+    ships = max(1, int(ships))
+    if ships == 1:
+        return 1.0
+    scaled = math.log(ships) / math.log(1000)
+    return 1.0 + (MAX_SPEED - 1.0) * (scaled ** 1.5)
+
+
+def distance_xy(ax, ay, bx, by):
+    return math.hypot(ax - bx, ay - by)
+
+
+def distance(a, b):
+    return distance_xy(a.x, a.y, b.x, b.y)
+
+
+def angle_diff(a, b):
+    return abs((a - b + math.pi) % (2.0 * math.pi) - math.pi)
+
+
+def infer_num_players(raw_initial_planets, raw_planets, raw_fleets, player):
+    owners = {int(player)}
+    for raw in raw_initial_planets:
+        owner = int(raw[1])
+        if owner >= 0:
+            owners.add(owner)
+    for raw in raw_planets:
+        owner = int(raw[1])
+        if owner >= 0:
+            owners.add(owner)
+    for raw in raw_fleets:
+        owner = int(raw[1])
+        if owner >= 0:
+            owners.add(owner)
+    return 2 if len(owners) <= 2 else 4
+
+
+def is_rotating(initial_planet):
+    orbital_radius = distance_xy(initial_planet.x, initial_planet.y, CENTER_X, CENTER_Y)
+    return orbital_radius + initial_planet.radius < 50.0
+
+
+def predicted_planet_position(planet, initial_planet, step, angular_velocity, comet_ids):
+    if planet.id in comet_ids or initial_planet is None or not is_rotating(initial_planet):
+        return planet.x, planet.y
+
+    dx = initial_planet.x - CENTER_X
+    dy = initial_planet.y - CENTER_Y
+    radius = math.hypot(dx, dy)
+    angle = math.atan2(dy, dx) + angular_velocity * step
+    return CENTER_X + radius * math.cos(angle), CENTER_Y + radius * math.sin(angle)
+
+
+def point_to_segment_distance(px, py, ax, ay, bx, by):
+    dx = bx - ax
+    dy = by - ay
+    if dx == 0.0 and dy == 0.0:
+        return distance_xy(px, py, ax, ay)
+    t = ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)
+    t = max(0.0, min(1.0, t))
+    return distance_xy(px, py, ax + t * dx, ay + t * dy)
+
+
+def crosses_sun(source, target_x, target_y):
+    return point_to_segment_distance(
+        CENTER_X, CENTER_Y, source.x, source.y, target_x, target_y
+    ) <= SUN_RADIUS + SUN_MARGIN
+
+
+def estimate_arrival_turns(source, target_x, target_y, ships):
+    return distance_xy(source.x, source.y, target_x, target_y) / fleet_speed(ships)
+
+
+def predict_intercept_position(source, target, initial_planet, current_step, angular_velocity, comet_ids, ships):
+    target_x, target_y = target.x, target.y
+    arrival_turns = estimate_arrival_turns(source, target_x, target_y, ships)
+
+    for _ in range(3):
+        future_step = current_step + arrival_turns
+        target_x, target_y = predicted_planet_position(
+            target, initial_planet, future_step, angular_velocity, comet_ids
+        )
+        arrival_turns = estimate_arrival_turns(source, target_x, target_y, ships)
+
+    return target_x, target_y, arrival_turns
+
+
+def fleet_points_toward_planet(fleet, planet):
+    heading = math.atan2(planet.y - fleet.y, planet.x - fleet.x)
+    dist = distance_xy(fleet.x, fleet.y, planet.x, planet.y)
+    tolerance = 0.22 + min(0.30, planet.radius / max(8.0, dist))
+    return angle_diff(fleet.angle, heading) <= tolerance
+
+
+def fleet_eta_to_planet(fleet, planet):
+    return distance_xy(fleet.x, fleet.y, planet.x, planet.y) / fleet_speed(fleet.ships)
+
+
+def resolve_planet_combat(owner, garrison, arrivals):
+    arrivals = {int(k): int(v) for k, v in arrivals.items() if int(v) > 0}
+    if not arrivals:
+        return int(owner), max(0, int(garrison))
+
+    ranked = sorted(arrivals.items(), key=lambda item: item[1], reverse=True)
+    top_owner, top_ships = ranked[0]
+    second_ships = ranked[1][1] if len(ranked) > 1 else 0
+    survivor = top_ships - second_ships
+    if survivor <= 0:
+        return int(owner), max(0, int(garrison))
+
+    if top_owner == owner:
+        return int(owner), max(0, int(garrison) + survivor)
+
+    if survivor > garrison:
+        return int(top_owner), int(survivor - garrison)
+    return int(owner), int(garrison - survivor)
+
+
+def project_planet_states(planets, fleets, player, horizon):
+    owner_by_id = {}
+    ships_by_id = {}
+    incoming_by_id = {}
+    first_loss_turn_by_id = {}
+
+    for planet in planets:
+        owner_by_id[planet.id] = [int(planet.owner)] + [int(planet.owner)] * horizon
+        ships_by_id[planet.id] = [int(planet.ships)] + [int(planet.ships)] * horizon
+        incoming_by_id[planet.id] = [dict() for _ in range(horizon + 1)]
+        first_loss_turn_by_id[planet.id] = None
+
+    planet_by_id = {planet.id: planet for planet in planets}
+    for fleet in fleets:
+        best_planet = None
+        best_eta = None
+        for planet in planets:
+            if not fleet_points_toward_planet(fleet, planet):
+                continue
+            eta = fleet_eta_to_planet(fleet, planet)
+            if eta <= horizon and (best_eta is None or eta < best_eta):
+                best_planet = planet
+                best_eta = eta
+
+        if best_planet is None or best_eta is None:
+            continue
+
+        turn = max(1, min(horizon, int(math.ceil(best_eta))))
+        arrivals = incoming_by_id[best_planet.id][turn]
+        arrivals[int(fleet.owner)] = arrivals.get(int(fleet.owner), 0) + int(fleet.ships)
+
+    for planet_id, planet in planet_by_id.items():
+        owner = int(planet.owner)
+        ships = int(planet.ships)
+        for turn in range(1, horizon + 1):
+            if owner >= 0:
+                ships += int(planet.production)
+
+            owner, ships = resolve_planet_combat(owner, ships, incoming_by_id[planet_id][turn])
+            owner_by_id[planet_id][turn] = owner
+            ships_by_id[planet_id][turn] = ships
+            if first_loss_turn_by_id[planet_id] is None and planet.owner == player and owner != player:
+                first_loss_turn_by_id[planet_id] = turn
+
+    return Projection(owner_by_id, ships_by_id, incoming_by_id, first_loss_turn_by_id)
+
+
+def base_reserve(planet, current_step, is_2p):
+    if current_step < 90:
+        return max(1, planet.production // 2 + 1) if is_2p else max(2, planet.production)
+    if current_step < 160:
+        return max(3, planet.production + 1) if is_2p else max(5, planet.production * 2)
+    if current_step > 430:
+        return max(7, planet.production * 3) if is_2p else max(10, planet.production * 4)
+    return max(4, planet.production * 2) if is_2p else max(6, planet.production * 3)
+
+
+def frontline_reserve_bonus(planet, planets, player, current_step, is_2p):
+    if current_step < 85:
+        return 0
+    bonus = 0
+    for enemy in planets:
+        if enemy.owner in (-1, player):
+            continue
+        dist = distance(enemy, planet)
+        if dist > (28.0 if is_2p else 22.0):
+            continue
+        if int(enemy.ships) < int(planet.ships) + int(planet.production) * 2:
+            continue
+        local = int(planet.production) + 2
+        if planet.production >= 4:
+            local += 3
+        if dist < 18:
+            local += 2
+        bonus = max(bonus, local)
+    return min(bonus, 10 if is_2p else 7)
+
+
+def safe_drain(source, projection, planets, fleets, player, config, current_step, is_2p):
+    owner_traj = projection.owner_by_id[source.id]
+    ships_traj = projection.ships_by_id[source.id]
+    held_slack = []
+
+    for turn in range(1, min(config.horizon, len(owner_traj) - 1) + 1):
+        if owner_traj[turn] == player and ships_traj[turn] > 0:
+            held_slack.append(int(ships_traj[turn]))
+
+    if held_slack:
+        drain = min(int(source.ships), min(held_slack))
+    else:
+        drain = int(source.ships)
+
+    reserve = base_reserve(source, current_step, is_2p)
+    reserve += frontline_reserve_bonus(source, planets, player, current_step, is_2p)
+    reserve += direct_threat_reserve_bonus(source, fleets, player, config.direct_threat_horizon, is_2p)
+    reserve += config.reserve_margin
+    return max(0, min(int(source.ships) - reserve, drain))
+
+
+
+def direct_threat_reserve_bonus(planet, fleets, player, horizon, is_2p):
+    enemy = 0
+    friendly = 0
+    soonest_enemy = None
+    for fleet in fleets:
+        if not fleet_points_toward_planet(fleet, planet):
+            continue
+        eta = fleet_eta_to_planet(fleet, planet)
+        if eta > horizon:
+            continue
+        if fleet.owner == player:
+            friendly += int(fleet.ships)
+        elif fleet.owner != -1:
+            enemy += int(fleet.ships)
+            soonest_enemy = eta if soonest_enemy is None else min(soonest_enemy, eta)
+    if enemy <= friendly:
+        return 0
+    margin = 2 if is_2p else 4
+    urgent = 3 if soonest_enemy is not None and soonest_enemy <= 8 else 0
+    return max(0, enemy - friendly + margin + urgent - max(0, int(planet.ships)))
+
+
+def projected_defense_need(target, projection, loss_turn, is_2p):
+    enemy_hold = int(projection.ships_by_id[target.id][loss_turn])
+    margin = 3 if is_2p else 5
+    need = max(4, enemy_hold + int(target.production) + margin)
+    if target.production >= 4:
+        need += 2 if is_2p else 3
+    return need
+
+def capture_floor(target, projection, eta, player, overhead=1):
+    turn = max(1, min(len(projection.ships_by_id[target.id]) - 1, int(math.ceil(eta))))
+    owner = projection.owner_by_id[target.id][turn]
+    ships = projection.ships_by_id[target.id][turn]
+    if owner == player:
+        return 1
+    return max(1, int(math.ceil(ships + overhead)))
+
+
+def player_power(planets, fleets):
+    stats = {}
+    for planet in planets:
+        if planet.owner < 0:
+            continue
+        entry = stats.setdefault(int(planet.owner), {"production": 0, "ships": 0, "planets": 0})
+        entry["production"] += int(planet.production)
+        entry["ships"] += int(planet.ships)
+        entry["planets"] += 1
+    for fleet in fleets:
+        if fleet.owner < 0:
+            continue
+        entry = stats.setdefault(int(fleet.owner), {"production": 0, "ships": 0, "planets": 0})
+        entry["ships"] += int(fleet.ships * 0.7)
+    for entry in stats.values():
+        entry["power"] = entry["production"] * 16 + entry["ships"] + entry["planets"] * 10
+    return stats
+
+
+
+
+def four_player_target_shaping(target, powers, player):
+    """V3-style 4P target shaping: prefer weak empires, avoid costly leader bashes."""
+    if target.owner < 0:
+        return 0.0
+
+    enemy_entries = [entry for owner, entry in powers.items() if owner != player]
+    if not enemy_entries:
+        return 0.0
+
+    owner_stats = powers.get(int(target.owner), {})
+    owner_power = owner_stats.get("power", 0)
+    owner_production = owner_stats.get("production", 0)
+    weakest = min(entry.get("power", 0) for entry in enemy_entries)
+    strongest = max(entry.get("power", 0) for entry in enemy_entries)
+    span = strongest - weakest
+
+    # Keep near-symmetric lobbies stable. Shape only after the table has separated.
+    if span < 28:
+        return 0.0
+
+    delta = 0.0
+    if owner_power <= weakest + 18:
+        delta += 14.0
+        if target.production >= 3:
+            delta += 10.0
+        if target.ships <= 18:
+            delta += 8.0
+
+    if owner_power >= strongest - 18:
+        if target.production >= 5 and target.ships <= 22:
+            delta += 10.0
+        elif span >= 35:
+            delta -= 16.0 + max(0.0, int(target.ships) - 16) * 0.45
+            if target.production <= 3:
+                delta -= 8.0
+        else:
+            delta -= 6.0
+
+    if owner_production <= 5 and target.production >= 4 and target.ships <= 20:
+        delta += 8.0
+
+    return delta
+
+
+def enemy_pressure(planet, planets, fleets, player, horizon):
+    pressure = 0.0
+    for enemy in planets:
+        if enemy.owner in (-1, player):
+            continue
+        eta = distance(enemy, planet) / fleet_speed(max(1, int(enemy.ships)))
+        if eta <= horizon:
+            pressure += int(enemy.ships) * max(0.0, 1.0 - eta / max(1.0, horizon))
+            pressure += int(enemy.production) * 3.0
+    for fleet in fleets:
+        if fleet.owner in (-1, player):
+            continue
+        eta = fleet_eta_to_planet(fleet, planet)
+        if eta <= horizon:
+            pressure += int(fleet.ships) * 0.7 * max(0.0, 1.0 - eta / max(1.0, horizon))
+    return pressure
+
+
+
+
+def nearest_owned_distance(target, planets, owner):
+    owned = [planet for planet in planets if planet.owner == owner]
+    if not owned:
+        return 999.0
+    return min(distance(source, target) for source in owned)
+
+
+def local_enemy_retake_risk(target, planets, player, arrival_eta, horizon, is_2p):
+    """Estimate how cheaply enemies can retake a planet after our candidate lands."""
+    risk = 0.0
+    window = horizon if is_2p else min(horizon, 18)
+    for enemy in planets:
+        if enemy.owner in (-1, player):
+            continue
+        eta = distance(enemy, target) / fleet_speed(max(1, int(enemy.ships)))
+        delay = eta - arrival_eta
+        if delay < -1.0 or delay > window:
+            continue
+        reach = max(0.0, 1.0 - max(0.0, delay) / max(1.0, window))
+        risk += int(enemy.ships) * reach
+        risk += int(enemy.production) * (2.4 if is_2p else 1.6) * reach
+    return risk
+
+
+def strategic_target_value(target, planets, powers, player, current_step, is_2p):
+    remaining = max(0, END_STEP - current_step)
+    my_dist = nearest_owned_distance(target, planets, player)
+    owner_stats = powers.get(int(target.owner), {}) if target.owner >= 0 else {}
+    my_stats = powers.get(int(player), {})
+
+    value = target.production * min(120.0 if is_2p else 82.0, remaining) * (0.52 if is_2p else 0.34)
+    value -= int(target.ships) * (1.05 if target.owner == -1 else 0.65)
+    value -= my_dist * (2.0 if is_2p else 1.25)
+
+    if target.owner >= 0 and target.owner != player:
+        value += target.production * (34.0 if is_2p else 20.0)
+        if owner_stats.get("production", 0) >= my_stats.get("production", 0):
+            value += target.production * (10.0 if is_2p else 6.0)
+        if owner_stats.get("power", 0) > my_stats.get("power", 0):
+            value += min(45.0 if is_2p else 24.0, (owner_stats.get("power", 0) - my_stats.get("power", 0)) * 0.10)
+    else:
+        # Long-term neutral value is front-loaded. Late neutral grabs need to be very efficient.
+        if current_step > 260 and target.production <= 3:
+            value -= 38.0
+        if current_step > 360:
+            value -= 24.0
+
+    if target.production >= 5:
+        value += 42.0 if is_2p else 28.0
+    elif target.production >= 4:
+        value += 20.0 if is_2p else 12.0
+    return value
+
+
+def attack_hold_margin(target, planets, player, eta, ships, needed, config, is_2p):
+    surplus = max(0, int(ships) - int(needed))
+    retake_risk = local_enemy_retake_risk(target, planets, player, eta, config.strategic_horizon, is_2p)
+    required_surplus = config.hold_margin
+    if target.production >= 4:
+        required_surplus += 1 if is_2p else 2
+    if retake_risk > 0:
+        required_surplus += int(min(8 if is_2p else 6, retake_risk * (0.16 if is_2p else 0.11)))
+    return surplus >= required_surplus
+
+
+def dynamic_config(base, powers, player, current_step, is_2p):
+    """Keep V4 planner structure, but tune risk by game phase and power state."""
+    try:
+        from dataclasses import replace
+    except Exception:
+        return base
+    my = powers.get(int(player), {})
+    enemy_entries = [entry for owner, entry in powers.items() if owner != player]
+    if not enemy_entries:
+        return base
+    best_enemy_prod = max(entry.get("production", 0) for entry in enemy_entries)
+    my_prod = my.get("production", 0)
+
+    if current_step < 90 and my_prod < best_enemy_prod + (2 if is_2p else 3):
+        return replace(
+            base,
+            opening_horizon=base.opening_horizon + (6 if is_2p else 4),
+            max_targets=base.max_targets + 3,
+            reserve_margin=max(1, base.reserve_margin - 1),
+            roi_threshold=max(0.8, base.roi_threshold - 0.7),
+        )
+    if current_step > base.consolidation_step and my_prod >= best_enemy_prod:
+        return replace(
+            base,
+            reserve_margin=base.reserve_margin + (2 if is_2p else 1),
+            roi_threshold=base.roi_threshold + 0.5,
+            hold_margin=base.hold_margin + 1,
+        )
+    return base
+
+def target_shortlist(my_planets, targets, planets, config, powers, player, is_2p, current_step):
+    ranked = []
+    for target in targets:
+        nearest = min(distance(source, target) for source in my_planets)
+        value = target.production * 64.0 - int(target.ships) * 1.15 - nearest * (2.0 if is_2p else 1.25)
+        value += strategic_target_value(target, planets, powers, player, current_step, is_2p) * 0.35
+        pressure = enemy_pressure(target, planets, [], player, 18 if is_2p else 12)
+        if target.owner == -1:
+            value -= pressure * (0.12 if is_2p else 0.08)
+        else:
+            value += target.production * (30.0 if is_2p else 17.0)
+            if not is_2p:
+                value += four_player_target_shaping(target, powers, player)
+        if target.production <= 1:
+            value -= 55.0
+        ranked.append((value, target))
+    ranked.sort(key=lambda item: item[0], reverse=True)
+    return [target for _, target in ranked[: config.max_targets]]
+
+def score_candidate(candidate, target, projection, planets, fleets, player, current_step, is_2p, powers):
+    remaining = max(0.0, END_STEP - current_step - candidate.eta)
+    horizon_payoff = min(115.0 if is_2p else 78.0, remaining)
+    prod_value = target.production * horizon_payoff * (0.50 if is_2p else 0.32)
+    pressure = enemy_pressure(target, planets, fleets, player, 28 if is_2p else 18)
+    retake_risk = local_enemy_retake_risk(target, planets, player, candidate.eta, 36 if is_2p else 22, is_2p)
+    risk_cost = max(0.0, pressure - candidate.ships) * (0.24 if is_2p else 0.16)
+    risk_cost += max(0.0, retake_risk - candidate.ships * 0.45) * (0.32 if is_2p else 0.18)
+    ship_cost = candidate.ships * (1.05 if candidate.kind in ("attack", "opening") else 0.72)
+    time_cost = candidate.eta * (2.45 if candidate.kind in ("attack", "opening") else 1.4)
+
+    if candidate.kind == "defense":
+        saved = target.production * 52.0 + int(target.ships) * 1.35
+        saved += max(0, END_STEP - current_step - candidate.eta) * target.production * 0.12
+        return saved - ship_cost - time_cost
+
+    score = prod_value + strategic_target_value(target, planets, powers, player, current_step, is_2p) * 0.45
+
+    if target.owner != -1:
+        owner_stats = powers.get(int(target.owner), {})
+        my_stats = powers.get(int(player), {})
+        score += target.production * (24.0 if is_2p else 14.0)
+        if owner_stats.get("power", 0) > my_stats.get("power", 0):
+            score += min(42.0 if is_2p else 22.0, (owner_stats.get("power", 0) - my_stats.get("power", 0)) * 0.08)
+        if not is_2p:
+            score += four_player_target_shaping(target, powers, player)
+
+    if target.owner == -1 and current_step > 250 and target.production <= 2:
+        score -= 45.0
+    if remaining < candidate.eta + 30 and target.owner == -1:
+        score -= 32.0
+
+    score -= risk_cost + ship_cost + time_cost
+    if target.production >= 5:
+        score += 42.0
+    elif target.production >= 4:
+        score += 20.0
+    return score
+
+def build_attack_candidates(
+    sources,
+    targets,
+    planets,
+    fleets,
+    projection,
+    budgets,
+    config,
+    player,
+    current_step,
+    angular_velocity,
+    initial_planets,
+    comet_ids,
+    is_2p,
+    powers,
+):
+    candidates = []
+    for source in sources:
+        budget = budgets.get(source.id, 0)
+        if budget < config.min_ships_to_launch:
+            continue
+        for target in targets:
+            if target.id in comet_ids:
+                continue
+            target_x, target_y, eta = predict_intercept_position(
+                source, target, initial_planets.get(target.id), current_step, angular_velocity, comet_ids, budget
+            )
+            if eta > config.horizon or crosses_sun(source, target_x, target_y):
+                continue
+            needed = capture_floor(target, projection, eta, player)
+            if needed > budget or needed < config.min_ships_to_launch:
+                continue
+            send = min(budget, int(needed) + max(config.hold_margin, int(target.production)))
+            if not attack_hold_margin(target, planets, player, eta, send, needed, config, is_2p):
+                continue
+            # Recompute moving-target intercept with final ship count.
+            target_x, target_y, eta = predict_intercept_position(
+                source, target, initial_planets.get(target.id), current_step, angular_velocity, comet_ids, send
+            )
+            if eta > config.horizon or crosses_sun(source, target_x, target_y):
+                continue
+            angle = math.atan2(target_y - source.y, target_x - source.x)
+            cand = Candidate("attack", source.id, target.id, angle, int(send), eta, 0.0)
+            cand.score = score_candidate(cand, target, projection, planets, fleets, player, current_step, is_2p, powers)
+            candidates.append(cand)
+    return candidates
+
+
+def predicted_enemy_capture_surplus(target, enemy_fleet, enemy_eta):
+    garrison = int(target.ships)
+    if target.owner >= 0:
+        garrison += int(target.production) * int(max(0.0, enemy_eta))
+    surplus = int(enemy_fleet.ships) - garrison
+    return surplus if surplus > 0 else 0
+
+
+def capture_holds_after_counter_snipe(target, planets, player, arrival_turn, ships_sent, needed, is_2p):
+    surplus = max(0, int(ships_sent) - int(needed) + 1)
+    horizon = 24 if is_2p else 14
+    margin = 4 if is_2p else 7
+
+    for enemy in planets:
+        if enemy.owner in (-1, player):
+            continue
+        enemy_eta = distance(enemy, target) / fleet_speed(max(1, int(enemy.ships)))
+        delay = enemy_eta - arrival_turn
+        if delay <= 0.0 or delay > horizon:
+            continue
+        projected_hold = surplus + int(target.production) * int(delay)
+        if int(enemy.ships) >= projected_hold + margin:
+            return False
+    return True
+
+
+def build_counter_snipe_candidates(
+    sources,
+    planets,
+    fleets,
+    budgets,
+    config,
+    player,
+    current_step,
+    angular_velocity,
+    initial_planets,
+    comet_ids,
+    is_2p,
+):
+    if current_step < (35 if is_2p else 55):
+        return []
+
+    candidates = []
+    max_delay = 14 if is_2p else 9
+    max_cost = 34 if is_2p else 24
+    enemy_eta_cap = 24 if is_2p else 18
+
+    neutral_targets = [
+        planet for planet in planets
+        if planet.owner == -1 and planet.id not in comet_ids and planet.production >= 3
+    ]
+
+    for source in sources:
+        budget = budgets.get(source.id, 0)
+        if budget < config.min_ships_to_launch:
+            continue
+
+        for target in neutral_targets:
+            for fleet in fleets:
+                if fleet.owner in (-1, player):
+                    continue
+                if not fleet_points_toward_planet(fleet, target):
+                    continue
+
+                enemy_eta = fleet_eta_to_planet(fleet, target)
+                if enemy_eta > enemy_eta_cap:
+                    continue
+
+                enemy_surplus = predicted_enemy_capture_surplus(target, fleet, enemy_eta)
+                if enemy_surplus <= 0:
+                    continue
+
+                probe_ships = max(1, enemy_surplus + 1)
+                target_x, target_y, travel_time = predict_intercept_position(
+                    source,
+                    target,
+                    initial_planets.get(target.id),
+                    current_step,
+                    angular_velocity,
+                    comet_ids,
+                    probe_ships,
+                )
+                delay = travel_time - enemy_eta
+                if delay < 1.0 or delay > max_delay:
+                    continue
+                if crosses_sun(source, target_x, target_y):
+                    continue
+
+                needed = enemy_surplus + int(target.production) * int(delay) + 1
+                needed += 1 if is_2p else 2
+                if needed > budget or needed > max_cost or needed < config.min_ships_to_launch:
+                    continue
+
+                target_x, target_y, travel_time = predict_intercept_position(
+                    source,
+                    target,
+                    initial_planets.get(target.id),
+                    current_step,
+                    angular_velocity,
+                    comet_ids,
+                    needed,
+                )
+                delay = travel_time - enemy_eta
+                if delay < 1.0 or delay > max_delay or crosses_sun(source, target_x, target_y):
+                    continue
+
+                if not capture_holds_after_counter_snipe(
+                    target, planets, player, travel_time, needed, needed, is_2p
+                ):
+                    continue
+
+                score = (
+                    target.production * 42.0
+                    + max(0.0, max_delay - delay) * 4.0
+                    - needed * 2.0
+                    - travel_time * 1.7
+                )
+                if target.production >= 5:
+                    score += 45.0
+                elif target.production >= 4:
+                    score += 22.0
+                if current_step > 220 and target.production <= 3:
+                    score -= 20.0
+
+                angle = math.atan2(target_y - source.y, target_x - source.x)
+                candidates.append(
+                    Candidate("counter_snipe", source.id, target.id, angle, int(needed), travel_time, score)
+                )
+
+    return candidates
+
+
+def build_defense_candidates(sources, my_planets, projection, budgets, config, player, current_step, is_2p):
+    candidates = []
+    for target in my_planets:
+        loss_turn = projection.first_loss_turn_by_id.get(target.id)
+        if loss_turn is None or loss_turn > config.horizon:
+            continue
+        need = projected_defense_need(target, projection, int(loss_turn), is_2p)
+        for source in sources:
+            if source.id == target.id:
+                continue
+            budget = budgets.get(source.id, 0)
+            if budget < need:
+                continue
+            eta = distance(source, target) / fleet_speed(need)
+            # Prefer arriving before the loss; allow quick recapture only for valuable planets.
+            if eta > loss_turn + (1.2 if target.production >= 4 else 0.35):
+                continue
+            angle = math.atan2(target.y - source.y, target.x - source.x)
+            urgency = max(0.0, config.horizon - float(loss_turn)) * 5.0
+            saved = target.production * 58.0 + max(0, END_STEP - current_step - loss_turn) * target.production * 0.15
+            score = saved + urgency - need * (0.72 if is_2p else 0.88) - eta * 2.2
+            if loss_turn <= 6:
+                score += 45.0
+            candidates.append(Candidate("defense", source.id, target.id, angle, int(need), eta, score))
+    return candidates
+
+
+def build_opening_expansion_candidates(
+    sources,
+    planets,
+    projection,
+    budgets,
+    config,
+    player,
+    current_step,
+    angular_velocity,
+    initial_planets,
+    comet_ids,
+    is_2p,
+    powers,
+):
+    # Planner horizon is intentionally short for normal combat, but openings often require
+    # a longer first wave. Add only cheap neutral expansion so it does not become a rewrite.
+    cutoff = 95 if is_2p else 70
+    if current_step > cutoff:
+        return []
+    my_prod = powers.get(int(player), {}).get("production", 0)
+    candidates = []
+    neutral_targets = [
+        p for p in planets
+        if p.owner == -1 and p.id not in comet_ids and p.production >= 2
+    ]
+    for source in sources:
+        budget = budgets.get(source.id, 0)
+        if budget < config.min_ships_to_launch:
+            continue
+        for target in neutral_targets:
+            probe = min(budget, max(config.min_ships_to_launch, int(target.ships) + 1))
+            target_x, target_y, eta = predict_intercept_position(
+                source, target, initial_planets.get(target.id), current_step, angular_velocity, comet_ids, probe
+            )
+            if eta > config.opening_horizon or crosses_sun(source, target_x, target_y):
+                continue
+            needed = max(config.min_ships_to_launch, int(target.ships) + 1)
+            send = min(budget, needed + max(config.hold_margin, int(target.production)))
+            if send > config.opening_max_cost or needed > budget:
+                continue
+            if target.production <= 2 and eta > 13.0:
+                continue
+            if not attack_hold_margin(target, planets, player, eta, send, needed, config, is_2p):
+                continue
+            target_x, target_y, eta = predict_intercept_position(
+                source, target, initial_planets.get(target.id), current_step, angular_velocity, comet_ids, send
+            )
+            if eta > config.opening_horizon or crosses_sun(source, target_x, target_y):
+                continue
+            angle = math.atan2(target_y - source.y, target_x - source.x)
+            scarcity_bonus = max(0, (10 if is_2p else 12) - my_prod) * (3.0 if target.production >= 4 else 1.2)
+            high_prod_bonus = 34.0 if target.production >= 5 else 18.0 if target.production >= 4 else 0.0
+            score = target.production * 78.0 + scarcity_bonus + high_prod_bonus - send * 2.18 - eta * 2.9
+            # make it compete with normal candidates while still filtered by ROI
+            candidates.append(Candidate("opening", source.id, target.id, angle, int(send), eta, score))
+    return candidates
+
+
+def greedy_select(candidates, budgets, config):
+    selected = []
+    target_taken = set()
+    defended_targets = set()
+    used_sources = set()
+
+    for cand in sorted(candidates, key=lambda item: item.score, reverse=True):
+        if len(selected) >= config.max_actions:
+            break
+        if cand.score <= config.roi_threshold:
+            break
+        if cand.ships > budgets.get(cand.source_id, 0):
+            continue
+        if cand.kind != "regroup" and cand.target_id in target_taken:
+            continue
+        if cand.source_id in defended_targets:
+            continue
+        if cand.kind == "defense" and cand.target_id in used_sources:
+            continue
+
+        selected.append(cand)
+        budgets[cand.source_id] = max(0, budgets.get(cand.source_id, 0) - cand.ships)
+        used_sources.add(cand.source_id)
+        if cand.kind != "regroup":
+            target_taken.add(cand.target_id)
+        if cand.kind == "defense":
+            defended_targets.add(cand.target_id)
+
+    return selected
+
+
+def build_regroup_candidates(my_planets, planets, fleets, budgets, config, player):
+    if not config.regroup_enabled:
+        return []
+
+    pressures = {
+        planet.id: enemy_pressure(planet, planets, fleets, player, config.horizon)
+        for planet in my_planets
+    }
+    candidates = []
+    for source in my_planets:
+        budget = budgets.get(source.id, 0)
+        if budget < config.min_ships_to_launch:
+            continue
+        source_pressure = pressures.get(source.id, 0.0)
+        for target in my_planets:
+            if target.id == source.id:
+                continue
+            dist = distance(source, target)
+            if dist > config.regroup_distance:
+                continue
+            gap = pressures.get(target.id, 0.0) - source_pressure
+            if gap < config.regroup_threshold:
+                continue
+            send = min(budget, max(config.min_ships_to_launch, int(gap * 0.35)))
+            eta = dist / fleet_speed(send)
+            angle = math.atan2(target.y - source.y, target.x - source.x)
+            score = gap - send * 0.45 - eta
+            candidates.append(Candidate("regroup", source.id, target.id, angle, int(send), eta, score))
+    return candidates
+
+
+def agent(obs):
+    player = obs.get("player", 0) if isinstance(obs, dict) else obs.player
+    raw_planets = obs.get("planets", []) if isinstance(obs, dict) else obs.planets
+    raw_initial_planets = obs.get("initial_planets", []) if isinstance(obs, dict) else obs.initial_planets
+    raw_fleets = obs.get("fleets", []) if isinstance(obs, dict) else obs.fleets
+    angular_velocity = obs.get("angular_velocity", 0.0) if isinstance(obs, dict) else obs.angular_velocity
+    current_step = obs.get("step", 0) if isinstance(obs, dict) else obs.step
+    comet_ids = set(obs.get("comet_planet_ids", [])) if isinstance(obs, dict) else set(obs.comet_planet_ids)
+
+    planets = [Planet(*p) for p in raw_planets]
+    fleets = [Fleet(*f) for f in raw_fleets]
+    initial_planets = {p.id: p for p in (Planet(*p) for p in raw_initial_planets)}
+    if not planets:
+        return []
+
+    num_players = infer_num_players(raw_initial_planets, raw_planets, raw_fleets, player)
+    is_2p = num_players == 2
+    base_config = CONFIG_2P if is_2p else CONFIG_4P
+
+    my_planets = [planet for planet in planets if planet.owner == player]
+    targets = [planet for planet in planets if planet.owner != player]
+    if not my_planets:
+        return []
+
+    powers = player_power(planets, fleets)
+    config = dynamic_config(base_config, powers, player, current_step, is_2p)
+    projection = project_planet_states(planets, fleets, player, config.horizon)
+    sources = sorted(
+        my_planets,
+        key=lambda p: (int(p.ships), int(p.production)),
+        reverse=True,
+    )[: config.max_sources]
+    budgets = {
+        source.id: safe_drain(source, projection, planets, fleets, player, config, current_step, is_2p)
+        for source in sources
+    }
+
+    shortlisted_targets = target_shortlist(my_planets, targets, planets, config, powers, player, is_2p, current_step)
+    candidates = []
+    candidates.extend(build_defense_candidates(sources, my_planets, projection, budgets, config, player, current_step, is_2p))
+    candidates.extend(
+        build_counter_snipe_candidates(
+            sources,
+            planets,
+            fleets,
+            budgets,
+            config,
+            player,
+            current_step,
+            angular_velocity,
+            initial_planets,
+            comet_ids,
+            is_2p,
+        )
+    )
+    candidates.extend(
+        build_opening_expansion_candidates(
+            sources,
+            planets,
+            projection,
+            budgets,
+            config,
+            player,
+            current_step,
+            angular_velocity,
+            initial_planets,
+            comet_ids,
+            is_2p,
+            powers,
+        )
+    )
+    candidates.extend(
+        build_attack_candidates(
+            sources,
+            shortlisted_targets,
+            planets,
+            fleets,
+            projection,
+            budgets,
+            config,
+            player,
+            current_step,
+            angular_velocity,
+            initial_planets,
+            comet_ids,
+            is_2p,
+            powers,
+        )
+    )
+
+    selected = greedy_select(candidates, dict(budgets), config)
+    spent = {source.id: 0 for source in sources}
+    for cand in selected:
+        spent[cand.source_id] = spent.get(cand.source_id, 0) + cand.ships
+
+    regroup_budgets = {
+        source.id: max(0, budgets.get(source.id, 0) - spent.get(source.id, 0))
+        for source in sources
+    }
+    regroup_candidates = build_regroup_candidates(my_planets, planets, fleets, regroup_budgets, config, player)
+    if regroup_candidates:
+        selected.extend(greedy_select(regroup_candidates, regroup_budgets, config))
+
+    return [[cand.source_id, cand.angle, int(cand.ships)] for cand in selected if cand.ships > 0]
