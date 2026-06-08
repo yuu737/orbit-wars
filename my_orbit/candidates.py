@@ -1,258 +1,14 @@
 import math
 from my_orbit.world import distance
-from dataclasses import dataclass
-
-@dataclass
-class Candidate:
-    kind: str
-    source_id: int
-    target_id: int
-    angle: float
-    ships: int
-    eta: float
-    score: float
-
-
-@dataclass
-class MultiCandidate:
-    kind: str
-    target_id: int
-    orders: list[Candidate]
-    eta: float
-    score: float
-    
-def player_power(planets, fleets):
-    stats = {}
-    for planet in planets:
-        if planet.owner < 0:
-            continue
-        entry = stats.setdefault(int(planet.owner), {"production": 0, "ships": 0, "planets": 0})
-        entry["production"] += int(planet.production)
-        entry["ships"] += int(planet.ships)
-        entry["planets"] += 1
-
-    for fleet in fleets:
-        if fleet.owner < 0:
-            continue
-        entry = stats.setdefault(int(fleet.owner), {"production": 0, "ships": 0, "planets": 0})
-        entry["ships"] += int(fleet.ships * 0.7)
-
-    for entry in stats.values():
-        entry["power"] = entry["production"] * 16 + entry["ships"] + entry["planets"] * 10
-
-    return stats
-
-
-def enemy_pressure(planet, planets, fleets, player, horizon, distance, fleet_speed, fleet_eta_to_planet):
-    pressure = 0.0
-
-    for enemy in planets:
-        if enemy.owner in (-1, player):
-            continue
-        eta = distance(enemy, planet) / fleet_speed(max(1, int(enemy.ships)))
-        if eta <= horizon:
-            pressure += int(enemy.ships) * max(0.0, 1.0 - eta / max(1.0, horizon))
-            pressure += int(enemy.production) * 3.0
-
-    for fleet in fleets:
-        if fleet.owner in (-1, player):
-            continue
-        eta = fleet_eta_to_planet(fleet, planet)
-        if eta <= horizon:
-            pressure += int(fleet.ships) * 0.7 * max(0.0, 1.0 - eta / max(1.0, horizon))
-
-    return pressure
-
-
-def orbital_ring_value(planet, distance_xy, CENTER_X, CENTER_Y):
-    radius = distance_xy(planet.x, planet.y, CENTER_X, CENTER_Y)
-    outer_bonus = max(0.0, radius - 22.0)
-    return outer_bonus * 1.8 + planet.production * 4.0
-
-
-def friendly_support_count(target, my_planets, max_dist, distance):
-    return sum(
-        1
-        for friend in my_planets
-        if friend.id != target.id and distance(friend, target) <= max_dist
-    )
-
-
-def selective_hold_target(target, my_planets, current_step, is_2p, friendly_support_count):
-    if current_step > (165 if is_2p else 120):
-        return False
-    if target.production < (5 if is_2p else 5):
-        return False
-    support = friendly_support_count(target, my_planets, 16.5 if is_2p else 12.0)
-    if support < 1:
-        return False
-    if target.owner == -1 and current_step > (115 if is_2p else 85):
-        return False
-    return True
-
-
-def target_shortlist(my_planets, targets, planets, config, distance):
-    ranked = []
-
-    for target in targets:
-        nearest = min(distance(source, target) for source in my_planets)
-        value = target.production * 65.0 - int(target.ships) * 1.4 - nearest * 2.2
-
-        if target.owner != -1:
-            value += target.production * 28.0
-        if target.production <= 1:
-            value -= 45.0
-
-        ranked.append((value, target))
-
-    ranked.sort(key=lambda item: item[0], reverse=True)
-    return [target for _, target in ranked[: config.max_targets]]
-
-def frontier_gate_score(
-    source,
-    target,
-    my_planets,
-    planets,
-    fleets,
-    player,
-    current_step,
-    is_2p,
-    enemy_pressure,
-    friendly_support_count,
-    orbital_ring_value,
-):
-    target_pressure = enemy_pressure(target, planets, fleets, player, 18 if is_2p else 12)
-    source_pressure = enemy_pressure(source, planets, fleets, player, 18 if is_2p else 12)
-    support = friendly_support_count(target, my_planets, 16.5 if is_2p else 12.0)
-    ring_gain = orbital_ring_value(target) - orbital_ring_value(source)
-
-    score = 0.0
-    score += ring_gain * 1.1
-    score += max(0.0, target_pressure - source_pressure) * 0.55
-    score += target.production * (8.0 if is_2p else 6.0)
-    score += support * 10.0
-
-    if current_step < 75:
-        score += 8.0
-    if target.production >= 5:
-        score += 12.0
-    if support == 0:
-        score -= 30.0
-    if ring_gain < 4.0:
-        score -= 20.0
-
-    return score
-
-def score_candidate(
-    candidate,
-    target,
-    projection,
-    planets,
-    fleets,
-    player,
-    current_step,
-    is_2p,
-    powers,
-    END_STEP,
+from my_orbit.scoring import (
     enemy_pressure,
     selective_hold_target,
-    capture_floor,
-    retake_risk_after_capture,
-):
-    remaining = max(0.0, END_STEP - current_step - candidate.eta)
-    horizon_payoff = min(75.0 if is_2p else 50.0, remaining)
-    prod_value = target.production * horizon_payoff * (0.55 if is_2p else 0.36)
-    pressure = enemy_pressure(target, planets, fleets, player, 24 if is_2p else 16)
-    risk_cost = max(0.0, pressure - candidate.ships) * (0.28 if is_2p else 0.18)
-    ship_cost = candidate.ships * (1.15 if candidate.kind == "attack" else 0.72)
-    time_cost = candidate.eta * (2.8 if candidate.kind == "attack" else 1.4)
-
-    if candidate.kind == "defense":
-        saved = target.production * 45.0 + int(target.ships) * 1.2
-        return saved - ship_cost - time_cost
-
-    denial = 0.0
-    if target.owner != -1:
-        owner_stats = powers.get(int(target.owner), {})
-        my_stats = powers.get(int(player), {})
-        denial += target.production * (22.0 if is_2p else 13.0)
-        if owner_stats.get("power", 0) > my_stats.get("power", 0):
-            denial += min(34.0, (owner_stats.get("power", 0) - my_stats.get("power", 0)) * 0.08)
-
-    if target.owner == -1 and current_step > 260 and target.production <= 2:
-        prod_value -= 35.0
-    if remaining < candidate.eta + 25 and target.owner == -1:
-        prod_value -= 25.0
-
-    score = prod_value + denial - risk_cost - ship_cost - time_cost
-
-    if candidate.kind == "attack" and selective_hold_target(
-        target,
-        [p for p in planets if p.owner == player],
-        current_step,
-        is_2p,
-    ):
-        capture_need = capture_floor(target, projection, candidate.eta, player)
-        post_capture = max(1, int(candidate.ships) - int(capture_need) + 1)
-        if not retake_risk_after_capture(
-            target,
-            planets,
-            player,
-            candidate.eta,
-            post_capture,
-            is_2p,
-        ):
-            score += 16.0 + target.production * 3.0
-
-    if target.production >= 5:
-        score += 34.0
-    elif target.production >= 4:
-        score += 16.0
-
-    return score
-
-def light_neutral_overexpand_penalty(
-    source,
-    target,
-    my_planets,
-    planets,
-    fleets,
-    player,
-    current_step,
-    is_2p,
-    distance,
-    fleet_speed,
-    fleet_eta_to_planet,
-):
-    if target.owner != -1:
-        return 0.0
-    if current_step >= 140:
-        return 0.0
-
-    target_pressure = enemy_pressure(
-        target,
-        planets,
-        fleets,
-        player,
-        16 if is_2p else 10,
-        distance,
-        fleet_speed,
-        fleet_eta_to_planet,
-    )
-
-    support_dist = min(
-        (distance(friend, target) for friend in my_planets if friend.id != source.id),
-        default=99.0,
-    )
-
-    penalty = 0.0
-    if target.production <= 2:
-        penalty += max(0.0, support_dist - (15.0 if is_2p else 11.0)) * 2.6
-        penalty += max(0.0, target_pressure - int(target.ships) - 2) * 0.32
-    elif target.production == 3 and target_pressure > int(target.ships) + 6:
-        penalty += (target_pressure - int(target.ships) - 6) * 0.18
-
-    return penalty
+    friendly_support_count,
+    score_candidate,
+    light_neutral_overexpand_penalty,
+    orbital_ring_value,
+    frontier_gate_score,
+)
 
 def build_attack_candidates(
     sources,
@@ -415,4 +171,386 @@ def build_attack_candidates(
 
             candidates.append(cand)
 
+    return candidates
+
+
+def build_counter_snipe_candidates(
+    sources,
+    planets,
+    fleets,
+    budgets,
+    config,
+    player,
+    current_step,
+    angular_velocity,
+    initial_planets,
+    comet_ids,
+    is_2p,
+    Candidate,
+    fleet_points_toward_planet,
+    fleet_eta_to_planet,
+    predicted_enemy_capture_surplus,
+    capture_holds_after_counter_snipe,
+    predict_intercept_position,
+    crosses_sun,
+):
+    if current_step < (35 if is_2p else 55):
+        return []
+
+    candidates = []
+    max_delay = 14 if is_2p else 9
+    max_cost = 34 if is_2p else 24
+    enemy_eta_cap = 24 if is_2p else 18
+
+    neutral_targets = [
+        planet for planet in planets
+        if planet.owner == -1 and planet.id not in comet_ids and planet.production >= 3
+    ]
+
+    for source in sources:
+        budget = budgets.get(source.id, 0)
+        if budget < config.min_ships_to_launch:
+            continue
+
+        for target in neutral_targets:
+            for fleet in fleets:
+                if fleet.owner in (-1, player):
+                    continue
+                if not fleet_points_toward_planet(fleet, target):
+                    continue
+
+                enemy_eta = fleet_eta_to_planet(fleet, target)
+                if enemy_eta > enemy_eta_cap:
+                    continue
+
+                enemy_surplus = predicted_enemy_capture_surplus(target, fleet, enemy_eta)
+                if enemy_surplus <= 0:
+                    continue
+
+                probe_ships = max(1, enemy_surplus + 1)
+                target_x, target_y, travel_time = predict_intercept_position(
+                    source,
+                    target,
+                    initial_planets.get(target.id),
+                    current_step,
+                    angular_velocity,
+                    comet_ids,
+                    probe_ships,
+                )
+                delay = travel_time - enemy_eta
+                if delay < 1.0 or delay > max_delay:
+                    continue
+                if crosses_sun(source, target_x, target_y):
+                    continue
+
+                needed = enemy_surplus + int(target.production) * int(delay) + 1
+                needed += 1 if is_2p else 2
+                if needed > budget or needed > max_cost or needed < config.min_ships_to_launch:
+                    continue
+
+                target_x, target_y, travel_time = predict_intercept_position(
+                    source,
+                    target,
+                    initial_planets.get(target.id),
+                    current_step,
+                    angular_velocity,
+                    comet_ids,
+                    needed,
+                )
+                delay = travel_time - enemy_eta
+                if delay < 1.0 or delay > max_delay or crosses_sun(source, target_x, target_y):
+                    continue
+
+                if not capture_holds_after_counter_snipe(
+                    target, planets, player, travel_time, needed, needed, is_2p
+                ):
+                    continue
+
+                score = (
+                    target.production * 42.0
+                    + max(0.0, max_delay - delay) * 4.0
+                    - needed * 2.0
+                    - travel_time * 1.7
+                )
+                if target.production >= 5:
+                    score += 45.0
+                elif target.production >= 4:
+                    score += 22.0
+                if current_step > 220 and target.production <= 3:
+                    score -= 20.0
+
+                angle = math.atan2(target_y - source.y, target_x - source.x)
+                candidates.append(
+                    Candidate("counter_snipe", source.id, target.id, angle, int(needed), travel_time, score)
+                )
+
+    return candidates
+
+
+def build_defense_candidates(
+    sources,
+    my_planets,
+    projection,
+    budgets,
+    config,
+    player,
+    current_step,
+    angular_velocity,
+    initial_planets,
+    comet_ids,
+    Candidate,
+    predict_intercept_position,
+    validate_intercept_window,
+    end_step,
+):
+    candidates = []
+    for target in my_planets:
+        loss_turn = projection.first_loss_turn_by_id.get(target.id)
+        if loss_turn is None or loss_turn > config.horizon:
+            continue
+        if target.production < 4 and loss_turn > 8:
+            continue
+        previous_turn = max(0, loss_turn - 1)
+        incoming = projection.incoming_by_id[target.id][loss_turn]
+        enemy_incoming = sum(
+            ships for owner, ships in incoming.items()
+            if owner not in (-1, player)
+        )
+        friendly_incoming = incoming.get(player, 0)
+        pre_loss_ships = projection.ships_by_id[target.id][previous_turn]
+        produced = int(target.production) if target.owner >= 0 else 0
+        estimated_shortfall = max(0, enemy_incoming - friendly_incoming - pre_loss_ships - produced)
+        need = max(4, estimated_shortfall + int(target.production) * 2 + 3)
+        if target.production < 4:
+            need = min(need, int(target.production * 3 + 7))
+        for source in sources:
+            if source.id == target.id:
+                continue
+            budget = budgets.get(source.id, 0)
+            if budget < need:
+                continue
+            tx, ty, eta = predict_intercept_position(
+                source, target, initial_planets.get(target.id), current_step, angular_velocity, comet_ids, need
+            )
+            if eta > loss_turn + 1.25:
+                continue
+            if not validate_intercept_window(
+                source, target, initial_planets.get(target.id), current_step, angular_velocity, comet_ids, need, tx, ty, eta
+            ):
+                continue
+            angle = math.atan2(ty - source.y, tx - source.x)
+            remaining = max(0, end_step - current_step - loss_turn)
+            saved = target.production * 58.0 + remaining * target.production * 0.18 + int(target.ships) * 0.6
+            if target.production >= 4:
+                saved += 45.0
+            if loss_turn <= 8:
+                saved += 28.0
+            score = saved - need * 0.95 - eta * 2.2
+            candidates.append(Candidate("defense", source.id, target.id, angle, int(need), eta, score))
+    return candidates
+
+
+def build_urgent_hold_candidates(
+    my_planets,
+    projection,
+    budgets,
+    config,
+    player,
+    current_step,
+    is_2p,
+    angular_velocity,
+    initial_planets,
+    comet_ids,
+    Candidate,
+    predict_intercept_position,
+    validate_intercept_window,
+):
+    candidates = []
+    for target in my_planets:
+        loss_turn = projection.first_loss_turn_by_id.get(target.id)
+        if loss_turn is None:
+            continue
+        if loss_turn > (7 if is_2p else 5):
+            continue
+        if target.production < (3 if is_2p else 4) and loss_turn > 4:
+            continue
+        previous_turn = max(0, loss_turn - 1)
+        incoming = projection.incoming_by_id[target.id][loss_turn]
+        enemy_incoming = sum(
+            ships for owner, ships in incoming.items()
+            if owner not in (-1, player)
+        )
+        friendly_incoming = incoming.get(player, 0)
+        pre_loss_ships = projection.ships_by_id[target.id][previous_turn]
+        produced = int(target.production) if target.owner >= 0 else 0
+        shortfall = max(0, enemy_incoming - friendly_incoming - pre_loss_ships - produced)
+        if shortfall <= 0:
+            continue
+        desired = max(config.min_ships_to_launch, shortfall + int(target.production) + 2)
+        for source in my_planets:
+            if source.id == target.id:
+                continue
+            safe_budget = budgets.get(source.id, 0)
+            reserve_break_budget = int(source.ships * (0.34 if loss_turn > 3 else 0.48))
+            budget = max(safe_budget, reserve_break_budget)
+            if budget < config.min_ships_to_launch:
+                continue
+            send = min(int(budget), int(desired))
+            tx, ty, eta = predict_intercept_position(
+                source, target, initial_planets.get(target.id), current_step, angular_velocity, comet_ids, send
+            )
+            if eta > loss_turn + (1.0 if is_2p else 0.6):
+                continue
+            if not validate_intercept_window(
+                source, target, initial_planets.get(target.id), current_step, angular_velocity, comet_ids, send, tx, ty, eta
+            ):
+                continue
+            angle = math.atan2(ty - source.y, tx - source.x)
+            urgency = max(0.0, (10 if is_2p else 7) - loss_turn)
+            score = (
+                target.production * (72.0 if is_2p else 56.0)
+                + shortfall * 3.5
+                + urgency * 12.0
+                - send * 1.2
+                - eta * 3.2
+            )
+            if safe_budget < send:
+                score -= (send - safe_budget) * 0.55
+            if target.production >= 4:
+                score += 32.0
+            candidates.append(Candidate("urgent_hold", source.id, target.id, angle, int(send), eta, score))
+    return candidates
+
+
+def build_frontline_relay_candidates(
+    my_planets,
+    planets,
+    fleets,
+    budgets,
+    config,
+    player,
+    current_step,
+    is_2p,
+    angular_velocity,
+    initial_planets,
+    comet_ids,
+    Candidate,
+    enemy_pressure,
+    orbital_ring_value,
+    friendly_support_count,
+    frontier_gate_score,
+    distance,
+    predict_intercept_position,
+    validate_intercept_window,
+):
+    if current_step > (105 if is_2p else 72):
+        return []
+    pressures = {
+        planet.id: enemy_pressure(planet, planets, fleets, player, 18 if is_2p else 12)
+        for planet in my_planets
+    }
+    candidates = []
+    for source in my_planets:
+        budget = budgets.get(source.id, 0)
+        if budget < max(6, config.min_ships_to_launch):
+            continue
+        if source.production >= (5 if is_2p else 6):
+            continue
+        source_pressure = pressures.get(source.id, 0.0)
+        for target in my_planets:
+            if target.id == source.id:
+                continue
+            if target.production < (4 if is_2p else 5):
+                continue
+            dist = distance(source, target)
+            if dist > (16.0 if is_2p else 11.5):
+                continue
+            target_pressure = pressures.get(target.id, 0.0)
+            gap = target_pressure - source_pressure
+            if gap < (24.0 if is_2p else 16.0):
+                continue
+            if orbital_ring_value(target) <= orbital_ring_value(source) + 4.0:
+                continue
+            support = friendly_support_count(target, my_planets, 16.5 if is_2p else 12.0)
+            if support < 1:
+                continue
+            gate = frontier_gate_score(source, target, my_planets, planets, fleets, player, current_step, is_2p)
+            if gate < (78.0 if is_2p else 62.0):
+                continue
+            send_cap = min(int(budget), max(8 if is_2p else 6, int(source.ships * (0.18 if is_2p else 0.15))))
+            send = min(send_cap, max(config.min_ships_to_launch, int(gap * 0.18)))
+            if send < max(5, config.min_ships_to_launch):
+                continue
+            tx, ty, eta = predict_intercept_position(
+                source, target, initial_planets.get(target.id), current_step, angular_velocity, comet_ids, send
+            )
+            if eta > (7.0 if is_2p else 5.0):
+                continue
+            if not validate_intercept_window(
+                source, target, initial_planets.get(target.id), current_step, angular_velocity, comet_ids, send, tx, ty, eta
+            ):
+                continue
+            angle = math.atan2(ty - source.y, tx - source.x)
+            score = (
+                gate
+                + target.production * (12.0 if is_2p else 10.0)
+                + gap * 0.85
+                - send * 1.45
+                - eta * 2.1
+            )
+            if current_step < 75:
+                score += 4.0
+            candidates.append(Candidate("frontline_relay", source.id, target.id, angle, int(send), eta, score))
+    return candidates
+
+
+def build_regroup_candidates(
+    my_planets,
+    planets,
+    fleets,
+    budgets,
+    config,
+    player,
+    current_step,
+    angular_velocity,
+    initial_planets,
+    comet_ids,
+    Candidate,
+    enemy_pressure,
+    distance,
+    predict_intercept_position,
+    validate_intercept_window,
+):
+    if not config.regroup_enabled:
+        return []
+    pressures = {
+        planet.id: enemy_pressure(planet, planets, fleets, player, config.horizon)
+        for planet in my_planets
+    }
+    candidates = []
+    for source in my_planets:
+        budget = budgets.get(source.id, 0)
+        if budget < config.min_ships_to_launch:
+            continue
+        source_pressure = pressures.get(source.id, 0.0)
+        for target in my_planets:
+            if target.id == source.id:
+                continue
+            dist = distance(source, target)
+            if dist > config.regroup_distance:
+                continue
+            gap = pressures.get(target.id, 0.0) - source_pressure
+            if gap < config.regroup_threshold:
+                continue
+            send = min(budget, max(config.min_ships_to_launch, int(gap * 0.35)))
+            tx, ty, eta = predict_intercept_position(
+                source, target, initial_planets.get(target.id), current_step, angular_velocity, comet_ids, send
+            )
+            if not validate_intercept_window(
+                source, target, initial_planets.get(target.id), current_step, angular_velocity, comet_ids, send, tx, ty, eta
+            ):
+                continue
+            angle = math.atan2(ty - source.y, tx - source.x)
+            score = gap - send * 0.45 - eta
+            candidates.append(Candidate("regroup", source.id, target.id, angle, int(send), eta, score))
     return candidates
