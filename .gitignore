@@ -12,6 +12,8 @@ replays/
 logs/
 checkpoints/
 artifacts/
+research_runs/
+tmp_eval_*.txt
 submissions/
 提出*/
 

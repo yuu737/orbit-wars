@@ -16,6 +16,11 @@ def wrap_shadow_builders(module, counters):
     original_expand = module.build_shadow_opening_expansion
     original_defense = module.build_shadow_emergency_defense
     original_micro_regroup = getattr(module, "build_shadow_micro_regroup", None)
+    original_attack = module.build_attack_candidates
+    original_greedy = module.greedy_select
+    original_critical_defense = getattr(module, "build_critical_defense_candidates", None)
+    original_pressure_defense = getattr(module, "build_pressure_defense_candidates", None)
+    original_breakout = getattr(module, "build_desperation_breakout", None)
 
     def inspect_expand_filters(args):
         sources = args[0]
@@ -109,8 +114,59 @@ def wrap_shadow_builders(module, counters):
             counters["defense_turns"].append(args[6])
         return result
 
+    def counted_attack(*args, **kwargs):
+        result = original_attack(*args, **kwargs)
+        counters["attack_calls"] += 1
+        counters["attack_candidates"] += len(result)
+        if result:
+            counters["attack_turns"].append(args[7])
+            counters["attack_score_max"] = max(counters["attack_score_max"], max(c.score for c in result))
+        return result
+
+    def counted_greedy(*args, **kwargs):
+        result = original_greedy(*args, **kwargs)
+        counters["greedy_calls"] += 1
+        counters["greedy_selected"] += len(result)
+        counters["greedy_attack_selected"] += sum(1 for c in result if c.kind in ("attack", "counter_snipe"))
+        if result:
+            counters["greedy_turns"].append(counters["attack_calls"])
+        return result
+
     module.build_shadow_opening_expansion = counted_expand
     module.build_shadow_emergency_defense = counted_defense
+    module.build_attack_candidates = counted_attack
+    module.greedy_select = counted_greedy
+    if original_critical_defense is not None:
+        def counted_critical_defense(*args, **kwargs):
+            result = original_critical_defense(*args, **kwargs)
+            counters["critical_defense_calls"] += 1
+            counters["critical_defense_candidates"] += len(result)
+            if result:
+                counters["critical_defense_turns"].append(args[6])
+            return result
+
+        module.build_critical_defense_candidates = counted_critical_defense
+    if original_pressure_defense is not None:
+        def counted_pressure_defense(*args, **kwargs):
+            result = original_pressure_defense(*args, **kwargs)
+            counters["pressure_defense_calls"] += 1
+            counters["pressure_defense_candidates"] += len(result)
+            if result:
+                counters["pressure_defense_turns"].append(args[6])
+            return result
+
+        module.build_pressure_defense_candidates = counted_pressure_defense
+    if original_breakout is not None:
+        def counted_breakout(*args, **kwargs):
+            result = original_breakout(*args, **kwargs)
+            counters["breakout_calls"] += 1
+            counters["breakout_candidates"] += len(result)
+            if result:
+                counters["breakout_turns"].append(args[6])
+                counters["breakout_score_max"] = max(counters["breakout_score_max"], max(c.score for c in result))
+            return result
+
+        module.build_desperation_breakout = counted_breakout
     if original_micro_regroup is not None:
         def counted_micro_regroup(*args, **kwargs):
             result = original_micro_regroup(*args, **kwargs)
@@ -154,6 +210,24 @@ def main():
         "defense_calls": 0,
         "defense_candidates": 0,
         "defense_turns": [],
+        "attack_calls": 0,
+        "attack_candidates": 0,
+        "attack_turns": [],
+        "attack_score_max": -999999.0,
+        "greedy_calls": 0,
+        "greedy_selected": 0,
+        "greedy_attack_selected": 0,
+        "greedy_turns": [],
+        "critical_defense_calls": 0,
+        "critical_defense_candidates": 0,
+        "critical_defense_turns": [],
+        "pressure_defense_calls": 0,
+        "pressure_defense_candidates": 0,
+        "pressure_defense_turns": [],
+        "breakout_calls": 0,
+        "breakout_candidates": 0,
+        "breakout_turns": [],
+        "breakout_score_max": -999999.0,
         "micro_regroup_calls": 0,
         "micro_regroup_candidates": 0,
         "micro_regroup_turns": [],

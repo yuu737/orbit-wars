@@ -1,6 +1,6 @@
 # Orbit Wars Experiment Log
 
-Last updated: 2026-06-06
+Last updated: 2026-06-07
 
 ## How to use this file
 
@@ -1145,3 +1145,922 @@ Decision:
 
 Next:
 - Build a tiny feature-guided score table rather than another broad rule: for early neutral attacks, use observed seed outcomes to prefer the V4.13-style mild score gap improvement without triggering V4.14's overlong doomed survival.
+
+## 2026-06-07 - V4.33-V4.38 no-action and defense-collapse probes
+
+Goal:
+- Investigate the video-observed "doing nothing while losing" behavior without spending many evaluation runs.
+- Use fixed large seeds `54661125,190734863,7777777` to avoid small-seed overfitting.
+
+Changes:
+- Added `--seed-list` and score-diff output to [analyze_losses.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/analyze_losses.py:1).
+- Extended [debug_shadow_activity.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/debug_shadow_activity.py:1) to count attack, greedy, and optional micro-regroup activity.
+- Added micro-regroup probes `V4.33` to `V4.36`; none were promoted.
+- Added [main_v4_37_midgame_reserve.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/bots/main_v4_37_midgame_reserve.py:1), a midgame reserve probe.
+- Added [main_v4_38_defense_horizon.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/bots/main_v4_38_defense_horizon.py:1), which extends defense/safe-drain projection horizon without extending attack horizon.
+
+Findings:
+- Direct shadow expansion remained mostly inert; direct neutral capture was blocked by ETA/sun or needed ships.
+- Micro-regroup can fire, but it easily destabilizes the planner. `V4.33` produced candidates but worsened seed `190734863`; stricter variants either did not fire or still looked unsafe.
+- Current submit [main.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/main.py:1) vs `hairate2` on large seeds classified as `defense_collapse=2`, `bad_overexpand=1`.
+- `V4.37` slightly improved survival against `hairate2` but worsened score diff.
+- `V4.38` beat current `main.py` in the light 2-seed self check, but still lost all 3 large seeds to `hairate2`; survival improved only slightly while score gap remained bad.
+
+Decision:
+- Do not promote `V4.33`-`V4.38`.
+- The next useful direction is not broad regroup. Focus on preventing the turn 80-120 collapse with better projected defense/counter-pressure, while preserving enough economy pressure to avoid a worse score gap.
+## 2026-06-07 - V5.2 comeback-only multi-source probe
+
+Goal:
+- Continue the V5 multi-source planner direction without destabilizing the V4.43/V5.1 baseline.
+- Reframe multi-source capture as a narrow comeback tool instead of a broad extra attack layer.
+
+Change:
+- Added [main_v5_2_comeback_multisource.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/bots/main_v5_2_comeback_multisource.py:1), copied from V5.1.
+- Restricted multi-source capture to 2P turns `105-260`.
+- Limited it to high-production enemy planets only, max 2 sources, and positions where the bot is behind or near-behind.
+- Added post-capture hold filtering via existing retake-risk logic and a higher score floor.
+- Let the multi-source layer scan all targets, while preserving the normal attack shortlist.
+
+Local evidence:
+- `py_compile` passed with `C:\tmp\ow\Scripts\python.exe -B`.
+- V5.2 vs V5.1 over 20 seeds, both seats:
+- Win rate: `57.5%`
+- Average score diff: `-524.27`
+- Crash rate: `0%`
+- V5.2 vs current [main.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/main.py:1) over 20 seeds, both seats:
+- Win rate: `87.5%`
+- Average score diff: `0.00`
+- Crash rate: `0%`
+- V5.2 vs `hairate2` over 20 seeds, both seats:
+- Win rate: `100%`
+- Average score diff: `+26243.15`
+- Crash rate: `0%`
+- Loss classification vs current `main.py`:
+- `endgame_waste=1`
+- `late_or_endgame_loss=4`
+- `win=35`
+
+Decision:
+- Do not promote V5.2.
+- The narrow comeback gate appears too restrictive: behavior is effectively close to current `main.py` on the tested seeds.
+- V5.1's multi-source layer still carries more local upside, but it is too broad and spends into bad positions.
+
+Next:
+- Build V5.3 around instrumentation first: count candidate generation and selected multi-source plans by rejection reason.
+- Then loosen one gate at a time, likely starting with hold-margin/retake checks rather than returning to neutral targets or 3-source plans.
+
+## 2026-06-07 - V5.3 and V5.4 hairate-focused defense probes
+
+Goal:
+- Move V5 toward the real target matchup, `bots/hairate.py`, instead of optimizing only around `hairate2` or V5 mirrors.
+- Reduce the dominant failure modes seen in `analyze_losses.py`: `defense_collapse` and `bad_overexpand`.
+
+Change:
+- Added [main_v5_3_hairate_defense.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/bots/main_v5_3_hairate_defense.py:1).
+- V5.3 added direct-threat defense candidates and a heavy early neutral expansion penalty.
+- Added [main_v5_4_selective_hold.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/bots/main_v5_4_selective_hold.py:1).
+- V5.4 kept the V5.1 core, imported stronger projected-defense sizing from the older selective-defense branch, and added only a light neutral-expansion guard.
+
+Local evidence:
+- `py_compile` passed for both V5.3 and V5.4.
+- Current [main.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/main.py:1) vs `bots/hairate.py` over 20 seeds and both seats:
+- Win rate: `0.0%`
+- Average score diff: `-2800.78`
+- V5.3 vs `bots/hairate.py` over 20 seeds and both seats:
+- Win rate: `0.0%`
+- Average score diff: `-3060.30`
+- V5.3 vs current `main.py` over 20 seeds and both seats:
+- Win rate: `47.5%`
+- Average score diff: `-1413.72`
+- V5.3 loss classification vs `bots/hairate.py`:
+- `bad_overexpand=28`
+- `defense_collapse=6`
+- `endgame_waste=2`
+- `late_stall=2`
+- `opening_loss=2`
+- V5.4 vs `bots/hairate.py` over 20 seeds and both seats:
+- Win rate: `0.0%`
+- Average score diff: `-2508.57`
+- V5.4 vs current `main.py` over 20 seeds and both seats:
+- Win rate: `70.0%`
+- Average score diff: `+401.30`
+- V5.4 loss classification vs `bots/hairate.py`:
+- `bad_overexpand=16`
+- `defense_collapse=21`
+- `endgame_waste=2`
+- `late_stall=1`
+
+Decision:
+- Reject V5.3.
+- Keep V5.4 as the current best V5 branch against `hairate`, but do not promote it to `main.py` yet.
+
+Next:
+- V5.4 showed that heavy direct-threat defense overcorrects into worse overexpand patterns, while selective projected defense improves the `hairate` score gap without collapsing against `main.py`.
+- The next V5 step should target the remaining `defense_collapse` cases with a narrow urgent-defense add-on on top of V5.4, not another broad attack planner change.
+
+## 2026-06-07 - V5.5 instrumentation branch
+
+Goal:
+- Start the long-term planner rewrite with observability first instead of another blind tuning pass.
+- Collect per-turn evidence for why V5 refuses actions, overspends, or fails to produce useful defense candidates.
+
+Change:
+- Added [main_v5_5_instrumented.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/bots/main_v5_5_instrumented.py:1), based on V5.4.
+- When `OW_V5_LOG` is set, the bot appends one JSON line per turn with:
+- candidate counts
+- rejection reasons for attack/defense/multi-source gating
+- source budgets
+- shortlist contents
+- selected actions before and after multi-source/shadow layers
+- Added [summarize_v5_debug.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/summarize_v5_debug.py:1) to aggregate the JSONL logs by reason and step bucket.
+
+Local evidence:
+- `py_compile` passed.
+- One-sample run with `OW_V5_LOG` produced `80` JSONL rows and the summarizer worked.
+- On that sample, the dominant zero-action reasons were `attack_eta_too_long`, `attack_needed_gt_budget`, and `attack_light_overexpand_penalty`.
+- The same sample produced only `2` defense candidates across `80` rows, which suggests the next useful step is not more attack tuning but making urgent defense opportunities appear earlier and more often.
+
+Decision:
+- Keep V5.5 as a research-only branch.
+
+Next:
+- Use V5.5 logs on fixed `hairate` seeds to identify where projected defense opportunities are missing versus merely losing in greedy selection.
+
+## 2026-06-07 - V5.6 urgent-hold defense probe
+
+Goal:
+- Act on the V5.5 finding that projected losses are common, but actual defense candidates are rare and often blocked by `budget_too_small` or `eta_too_late`.
+- Add only a narrow reserve-breaking defense path instead of another broad planner rewrite.
+
+Change:
+- Added [main_v5_6_urgent_hold.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/bots/main_v5_6_urgent_hold.py:1), based on V5.4.
+- Added `urgent_hold` candidates for planets projected to fall within `5-7` turns.
+- Let those urgent holds use a limited fraction of raw source ships instead of only safe-drain budget.
+- Selected at most `2` urgent holds before the normal planner, then handed the reduced budget to the baseline V5.4 planner.
+
+Local evidence:
+- `py_compile` passed.
+- V5.5 fixed-seed instrumentation vs `hairate` over collapse-heavy seeds `1,2,5,6,9,14,15,16,17,19`:
+- `Rows: 2309`
+- `defense_loss_planets: 1841`
+- `defense_candidates: 245`
+- dominant defense failures: `defense_eta_too_late=3536`, `defense_budget_too_small=3081`
+- V5.6 vs `bots/hairate.py` over 20 seeds and both seats:
+- Win rate: `0.0%`
+- Average score diff: `-2277.43`
+- V5.4 baseline vs `bots/hairate.py` on the same suite:
+- Average score diff: `-2508.57`
+- V5.6 vs current [main.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/main.py:1) over 20 seeds and both seats:
+- Win rate: `55.0%`
+- Average score diff: `+866.85`
+- V5.6 loss classification vs `bots/hairate.py`:
+- `bad_overexpand=14`
+- `defense_collapse=23`
+- `endgame_waste=2`
+- `late_stall=1`
+
+Decision:
+- Keep V5.6 as the current strongest V5 branch against `hairate`.
+- Do not promote yet; it still loses all tested games.
+
+Next:
+- The urgent-hold idea helped the score gap, but `defense_collapse` is still high.
+- The next useful step is not broader reserve breaking; it is multi-source defense or earlier frontline relocation so threatened planets can actually be reached in time.
+
+## 2026-06-07 - V5.7 and V5.8 pre-collapse defense probes
+
+Goal:
+- Continue from V5.6 by testing whether "one source cannot arrive in time" is the remaining bottleneck against `hairate`.
+- Probe two next-step ideas:
+- V5.7: 2-source emergency defense on a single threatened high-value planet
+- V5.8: early frontline relay to pre-position ships before the collapse turn
+
+Change:
+- Added [main_v5_7_multihold.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/bots/main_v5_7_multihold.py:1), based on V5.6.
+- V5.7 tries one narrow `multi_hold` defense before the regular planner.
+- Added [main_v5_8_frontline_relay.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/bots/main_v5_8_frontline_relay.py:1), also based on V5.6.
+- V5.8 adds one early/midgame `frontline_relay` from a low-pressure rear planet into a high-pressure high-production ally.
+
+Local evidence:
+- `py_compile` passed for both V5.7 and V5.8.
+- V5.6 vs `bots/hairate.py` over 20 seeds and both seats:
+- Average score diff: `-2277.43`
+- V5.7 vs `bots/hairate.py` over 20 seeds and both seats:
+- Average score diff: `-2317.55`
+- V5.7 vs current [main.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/main.py:1) over 20 seeds and both seats:
+- Win rate: `55.0%`
+- Average score diff: `+504.55`
+- V5.7 loss classification vs `bots/hairate.py`:
+- `bad_overexpand=15`
+- `defense_collapse=22`
+- `endgame_waste=1`
+- `late_stall=2`
+- V5.8 vs `bots/hairate.py` over 20 seeds and both seats:
+- Average score diff: `-2873.95`
+- V5.8 vs current `main.py` over 20 seeds and both seats:
+- Win rate: `25.0%`
+- Average score diff: `-2262.15`
+- V5.8 loss classification vs `bots/hairate.py`:
+- `bad_overexpand=22`
+- `defense_collapse=16`
+- `endgame_waste=1`
+- `late_stall=1`
+
+Decision:
+- Reject V5.7.
+- Reject V5.8.
+- Keep V5.6 as the current best V5 branch against `hairate`.
+
+Next:
+- Simple pre-collapse defense additions are reaching diminishing returns.
+- The next serious step should move away from layered patches and into a unified planner rewrite where defense, opening expansion, and repositioning compete in one action pool.
+
+## 2026-06-07 - V6.0 unified action-pool prototype
+
+Goal:
+- Start the real planner rewrite instead of adding another V5 patch.
+- Make relay, urgent hold, defense, counter-snipe, and attack compete in one shared greedy pool.
+
+Change:
+- Added [main_v6_0_unified_pool.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/bots/main_v6_0_unified_pool.py:1), based on V5.6.
+- Kept the V5.6 evaluation helpers and shadow layer.
+- Added `frontline_relay` candidate generation directly into the main planner branch.
+- Removed the old "select urgent holds first, then run the normal planner" flow.
+- Let `urgent_hold`, `frontline_relay`, `defense`, `counter_snipe`, and `attack` all enter one shared candidate pool and one shared `greedy_select`.
+- Allowed only relay and urgent-hold generation to see reserve-broken budgets; normal attack and defense candidates still use safe-drain budgets.
+
+Local evidence:
+- `py_compile` passed.
+- V6.0 vs `bots/hairate.py` over 20 seeds and both seats:
+- Win rate: `0.0%`
+- Average score diff: `-3061.30`
+- Average survival turn: `130.05`
+- V6.0 vs current [main.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/main.py:1) over 20 seeds and both seats:
+- Win rate: `35.0%`
+- Average score diff: `-1278.42`
+- V6.0 loss classification vs `bots/hairate.py`:
+- `bad_overexpand=18`
+- `defense_collapse=20`
+- `endgame_waste=1`
+- `late_stall=1`
+
+Decision:
+- Keep V6.0 as a research branch only.
+- Do not promote it; this first unified version is clearly worse than V5.6.
+
+Takeaway:
+- The unified action-pool direction is still the right architectural move, but the first scoring/gating is too eager.
+- `frontline_relay` plus reserve access created too much early/midgame overextension before the hold logic could pay it back.
+- The next version should narrow relay sharply and make position-building conditional on a stronger map signal, not just local pressure gap.
+
+Next:
+- Build V6.1 around a stricter opening/frontier map:
+- score outer-ring high-production lane control explicitly
+- cap relay spending harder
+- require stronger local support before non-defensive reserve breaking
+- keep the unified pool, but separate "reserve-using structural moves" from ordinary tactical moves with a tighter admission gate
+
+## 2026-06-07 - V6.1 frontier-gated unified pool
+
+Goal:
+- Keep the V6 unified planner shape, but remove the over-eager reserve relay behavior from V6.0.
+- Make structural reserve use depend on a stronger frontier signal instead of a simple local pressure gap.
+
+Change:
+- Added [main_v6_1_frontier_gated.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/bots/main_v6_1_frontier_gated.py:1), based on V6.0.
+- Added helper signals for:
+- `orbital_ring_value`
+- `friendly_support_count`
+- `frontier_gate_score`
+- Tightened `frontline_relay` so it now requires:
+- shorter timing window
+- larger pressure gap
+- positive outer-ring gain
+- at least one nearby friendly support planet
+- stronger map-gate score before entering the unified pool
+- Capped relay send size harder and reduced reserve-break access from `0.34/0.42` to `0.28/0.34` of source ships.
+
+Local evidence:
+- `py_compile` passed.
+- V6.1 vs `bots/hairate.py` over 20 seeds and both seats:
+- Win rate: `0.0%`
+- Average score diff: `-2390.28`
+- Average survival turn: `126.88`
+- V6.0 baseline on the same suite:
+- Average score diff: `-3061.30`
+- V5.6 baseline on the same suite:
+- Average score diff: `-2277.43`
+- V6.1 vs current [main.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/main.py:1) over 20 seeds and both seats:
+- Win rate: `55.0%`
+- Average score diff: `+777.00`
+- V6.1 loss classification vs `bots/hairate.py`:
+- `bad_overexpand=13`
+- `defense_collapse=22`
+- `early_defense_collapse=2`
+- `endgame_waste=2`
+- `late_stall=1`
+
+Decision:
+- Keep V6.1 as the best V6 research branch so far.
+- Do not promote it yet; it still trails V5.6 against `hairate`.
+
+Takeaway:
+- The unified planner can be stabilized.
+- The frontier-gated relay cut the V6.0 overexpansion problem materially and restored positive performance against current `main.py`.
+- The remaining gap to `hairate` is now less about reckless expansion and more about early-to-mid hold quality.
+
+Next:
+- Build V6.2 around unified early hold strength:
+- strengthen `urgent_hold` and normal `defense` scoring inside the same pool
+- explicitly reward preserving newly won high-production planets through the first counter window
+- consider a small multi-source hold / handoff action before re-enabling broader structural relocation
+
+## 2026-06-07 - Fixed hairate benchmarks and planner search tooling
+
+Goal:
+- Move beyond ad hoc hand-tuning by adding a repeatable fixed benchmark and a generic config search script.
+- Make it easy to compare V6 branches under the exact same `hairate` seed set.
+
+Change:
+- Added fixed benchmark specs:
+- [benchmarks/hairate_fixed_2p.json](C:/Users/yuu98/Desktop/kaggle/orbit-wars/benchmarks/hairate_fixed_2p.json:1)
+- [benchmarks/hairate_focus_2p.json](C:/Users/yuu98/Desktop/kaggle/orbit-wars/benchmarks/hairate_focus_2p.json:1)
+- Added [search_planner_params.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/search_planner_params.py:1)
+- The search script:
+- loads a planner module dynamically
+- rewrites `CONFIG_2P` / `CONFIG_4P` through `PlannerConfig`
+- expands repeated `--set key=v1,v2,...` dimensions into a cartesian product
+- runs every variant on a fixed benchmark spec
+- ranks variants by average score diff, then win rate and survival
+- can emit JSONL summaries for later analysis
+
+Smoke test:
+- `py_compile` passed for `search_planner_params.py`.
+- Ran:
+- `C:\tmp\ow\Scripts\python.exe -B .\search_planner_params.py --agent bots\main_v6_1_frontier_gated.py --benchmark benchmarks\hairate_focus_2p.json --set roi_threshold=2.0,2.2 --set reserve_margin=2,3 --limit 3`
+- Result on the focused `hairate` benchmark:
+- `base`: `diff=-2080.85`
+- `roi_threshold=2.0 | reserve_margin=2`: `diff=-2201.00`
+- `roi_threshold=2.0 | reserve_margin=3`: `diff=-2684.40`
+- In that small sample, `base` remained best.
+
+Takeaway:
+- We now have a formal `hairate` benchmark layer and a reusable tuning loop.
+- From here, parameter experiments can be batched and compared without changing the bot code by hand each time.
+
+Next:
+- Use the focused benchmark for fast iteration inside a branch.
+- Use the broad benchmark before promoting any candidate.
+- After V6.2 exists, run targeted sweeps over:
+- `roi_threshold`
+- `reserve_margin`
+- `defense_horizon`
+- `max_actions`
+
+## 2026-06-07 - V6.2 early-hold push
+
+Goal:
+- Push the unified planner further toward `hairate` by valuing early hold more aggressively.
+- Protect newly won high-production planets through the first enemy counter window.
+
+Change:
+- Added [main_v6_2_early_hold.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/bots/main_v6_2_early_hold.py:1), based on V6.1.
+- Added `hold_priority_bonus` and used it in:
+- defense scoring
+- urgent-hold scoring
+- high-production attack scoring
+- Let high-production attacks send extra hold margin when budget allowed.
+- Tightened/filtered high-production attacks by rejecting some captures that still looked too easy to retake.
+- Let normal `defense` candidate generation see reserve-side budgets inside the unified planner.
+- Made urgent-hold reserve breaking slightly more permissive.
+
+Local evidence:
+- `py_compile` passed.
+- V6.2 vs `bots/hairate.py` over 20 seeds and both seats:
+- Win rate: `0.0%`
+- Average score diff: `-2643.90`
+- Average survival turn: `126.45`
+- V6.1 baseline on the same suite:
+- Average score diff: `-2390.28`
+- V6.2 vs current [main.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/main.py:1) over 20 seeds and both seats:
+- Win rate: `37.5%`
+- Average score diff: `-810.45`
+- V6.1 baseline vs current `main.py`:
+- Win rate: `55.0%`
+- Average score diff: `+777.00`
+- V6.2 loss classification vs `bots/hairate.py`:
+- `bad_overexpand=19`
+- `defense_collapse=19`
+- `endgame_waste=2`
+
+Decision:
+- Reject V6.2.
+- Keep V6.1 as the best current V6 branch.
+
+Takeaway:
+- The architectural target was right, but the implementation was too broad.
+- "Early hold" cannot be improved just by adding more hold margin and more reserve access across the board.
+- In this form, the planner over-commits into expensive positions and recreates the overexpansion problem.
+
+Next:
+- Go narrower than V6.2:
+- keep V6.1 as the base
+- only add hold-aware attack sizing on very high-value targets
+- use the new focused `hairate` benchmark plus parameter search before broad evaluation
+
+## 2026-06-07 - V6.3 selective hold-aware attack with focused benchmark gating
+
+Goal:
+- Recover the useful part of V6.2 without reopening broad overcommit.
+- Use the new "upper-tier style" workflow: first test on the fixed focused `hairate` benchmark, then promote the best setting to broad evaluation.
+
+Change:
+- Added [main_v6_3_selective_hold_attack.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/bots/main_v6_3_selective_hold_attack.py:1), based on V6.1.
+- Added a narrow `selective_hold_target` gate:
+- only early/midgame
+- only very high-value captures (`prod 5`)
+- requires nearby friendly support
+- tighter neutral timing gate
+- Only those targets can receive extra hold-aware attack sizing.
+- Added a modest score bonus for hold-safe selective captures instead of broad hold inflation.
+
+Focused benchmark search:
+- Ran [search_planner_params.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/search_planner_params.py:1) on [benchmarks/hairate_focus_2p.json](C:/Users/yuu98/Desktop/kaggle/orbit-wars/benchmarks/hairate_focus_2p.json:1):
+- `base`: `diff=-1978.15`
+- `roi_threshold=2.1 | reserve_margin=2`: `diff=-2071.85`
+- `roi_threshold=2.2 | reserve_margin=2`: `diff=-2082.45`
+- `roi_threshold=2.1 | reserve_margin=3`: `diff=-2412.75`
+- `roi_threshold=2.2 | reserve_margin=3`: `diff=-2430.60`
+- Best focused result was the base V6.3 setting, so that setting was promoted to broad testing.
+
+Local evidence:
+- `py_compile` passed.
+- V6.3 vs `bots/hairate.py` on the focused benchmark:
+- Average score diff: `-2078.35`
+- V6.1 baseline on the earlier focused sample:
+- Average score diff: `-2080.85`
+- V6.3 vs `bots/hairate.py` over 20 seeds and both seats:
+- Win rate: `0.0%`
+- Average score diff: `-2279.40`
+- V6.1 baseline on the same broad suite:
+- Average score diff: `-2390.28`
+- V5.6 baseline on the same broad suite:
+- Average score diff: `-2277.43`
+- V6.3 vs current [main.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/main.py:1) over 20 seeds and both seats:
+- Win rate: `55.0%`
+- Average score diff: `+929.95`
+- V6.3 loss classification vs `bots/hairate.py`:
+- `bad_overexpand=12`
+- `defense_collapse=23`
+- `early_defense_collapse=2`
+- `endgame_waste=2`
+- `late_stall=1`
+
+Decision:
+- Keep V6.3 as the current best V6 branch.
+- It is still not ready to replace the best overall baseline, but it nearly matches V5.6 against `hairate` while being structurally closer to the final unified planner direction.
+
+Takeaway:
+- The narrow hold-aware attack idea works better than broad early-hold inflation.
+- Overexpansion improved slightly again, but the main remaining wall is still `defense_collapse`.
+- The new search/benchmark workflow successfully prevented us from promoting a worse parameter setting.
+
+Next:
+- Use V6.3 as the new research base.
+- Explore one narrow next step:
+- either selective multi-source hold on threatened `prod 5` planets
+- or earlier same-pool defense candidate generation for collapse-heavy seeds
+- Run focused benchmark first, then broad benchmark only for the winner
+
+## 2026-06-07 - V6.4 and V6.5 defensive probes under focused benchmark gating
+
+Goal:
+- Continue growing the unified planner while staying disciplined about promotion.
+- Test two narrow defense-collapse ideas, but gate both through the focused `hairate` benchmark before spending time on broad evaluation.
+
+### V6.4 selective multihold
+
+Change:
+- Added [main_v6_4_selective_multihold.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/bots/main_v6_4_selective_multihold.py:1), based on V6.3.
+- Added a very narrow `multi_hold` rescue:
+- 2-player only
+- `prod 5` planets only
+- projected loss within `6` turns
+- at most 2 sources
+- appended before normal multi-capture
+
+Focused benchmark result:
+- Search over `roi_threshold={2.1,2.2}` and `reserve_margin={2,3}` on [benchmarks/hairate_focus_2p.json](C:/Users/yuu98/Desktop/kaggle/orbit-wars/benchmarks/hairate_focus_2p.json:1):
+- `base`: `diff=-1978.15`
+- same as V6.3 base on the same focused set
+
+Decision:
+- Reject V6.4.
+- The selective multihold probe did not improve the focused benchmark and likely did not activate meaningfully on the target seeds.
+
+### V6.5 priority defense
+
+Change:
+- Added [main_v6_5_priority_defense.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/bots/main_v6_5_priority_defense.py:1), also based on V6.3.
+- Added `priority_defense` candidates:
+- only for collapsing `prod 5` planets
+- only within `4-6` turns
+- may use limited reserve through the unified pool
+
+Focused benchmark result:
+- Search over `roi_threshold={2.1,2.2}` and `reserve_margin={2,3}` on the same focused benchmark:
+- `base`: `diff=-2002.15`
+- worse than V6.3 base `diff=-1978.15`
+
+Decision:
+- Reject V6.5.
+
+Takeaway:
+- Narrowing the branch and using the focused benchmark first saved time and prevented broad runs on weak candidates.
+- The immediate wall is probably not "one more defense patch."
+- V6.3 remains the current best V6 branch:
+- broad `hairate` diff `-2279.40`
+- broad `main.py` diff `+929.95`
+
+Next:
+- Keep V6.3 as the active research base.
+- The next promising angle is earlier shape control rather than another late rescue:
+- attack shortlist quality
+- support-aware opening capture ordering
+- or defense candidate generation that reacts before the projected loss window gets short
+
+## 2026-06-07 - Shot audit for sun loss and likely aim waste
+
+Goal:
+- Check whether visible "shots drifting into the sun" or other wasted launches are a major real bottleneck.
+- Measure this from replay data instead of guessing from a few watched games.
+
+Change:
+- Added [audit_shots.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/audit_shots.py:1).
+- The audit replays fixed seeds, reads each recorded `action`, matches launched fleets, then classifies each disappearance as:
+- `sun_loss`
+- `out_of_bounds`
+- `planet_hit`
+- `unknown_loss`
+- It also keeps a rough `target_guess` from launch angle so we can estimate likely wrong-planet hits.
+
+Local evidence:
+- Ran `main.py` vs `bots/hairate.py` on seeds `0-9`, both seats:
+- launches: `1496`
+- `sun_loss=14` (`0.9%`)
+- `out_of_bounds=113` (`7.6%`)
+- `planet_hit=1364` (`91.2%`)
+- `target_hit_guess=825` (`55.1%`)
+- `wrong_planet_hit_guess=539` (`36.0%`)
+- Ran [main_v6_3_selective_hold_attack.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/bots/main_v6_3_selective_hold_attack.py:1) on the same suite:
+- launches: `1356`
+- `sun_loss=13` (`1.0%`)
+- `out_of_bounds=89` (`6.6%`)
+- `planet_hit=1246` (`91.9%`)
+- `target_hit_guess=696` (`51.3%`)
+- `wrong_planet_hit_guess=550` (`40.6%`)
+
+Takeaway:
+- Sun loss is real, but it is not the dominant failure mode in these samples.
+- The larger waste bucket is fleets that run out of bounds, plus a sizable amount of likely wrong-planet contact under the current rough target-guess heuristic.
+- This suggests shot quality is worth improving, but the first payoff is probably not just stricter sun safety; it is better target intent / aiming fidelity for selected attacks.
+
+Note:
+- `wrong_planet_hit_guess` is heuristic, not exact ground truth; it uses the nearest angular target at launch as the guessed intent.
+
+## 2026-06-07 - Friendly rotating-planet aim fix
+
+Goal:
+- Fix the most actionable shot-quality issue after the audit.
+- Reduce `out_of_bounds` launches caused by aiming at the current position of rotating friendly planets during defense, relay, and regroup moves.
+
+Finding:
+- The upgraded shot audit on [main_v6_3_selective_hold_attack.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/bots/main_v6_3_selective_hold_attack.py:1) over seeds `0-9`, both seats vs `bots/hairate.py` showed:
+- `out_of_bounds=89` (`6.6%`)
+- `out_kind_friendly=57` (`64.0%` of out_of_bounds)
+- `out_rot_rotating=67` (`75.3%` of out_of_bounds)
+- This strongly suggested that many wasted shots were friendly-targeted actions aimed at stale positions on rotating planets.
+
+Change:
+- Added [main_v6_6_friendly_aim_fix.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/bots/main_v6_6_friendly_aim_fix.py:1), based on V6.3.
+- Updated these friendly-targeted candidate builders to use predicted arrival-time positions instead of current positions:
+- `build_defense_candidates`
+- `build_urgent_hold_candidates`
+- `build_frontline_relay_candidates`
+- `build_regroup_candidates`
+- Added a small `validate_intercept_window(...)` check so these actions are dropped when the straight-line flight is unlikely to meet the rotating target within a sampled arrival window.
+
+Local evidence:
+- `py_compile` passed.
+- Shot audit on `V6.6` over seeds `0-9`, both seats vs `bots/hairate.py`:
+- launches: `1553`
+- `sun_loss=13` (`0.8%`)
+- `out_of_bounds=48` (`3.1%`)
+- `planet_hit=1472` (`94.8%`)
+- `out_kind_friendly=11` (`22.9%` of out_of_bounds)
+- `out_rot_rotating=20` (`41.7%` of out_of_bounds)
+- Compared with `V6.3` on the same suite:
+- `out_of_bounds`: `89 -> 48`
+- `out_kind_friendly`: `57 -> 11`
+- `out_rot_rotating`: `67 -> 20`
+- V6.6 vs `bots/hairate.py` over 20 seeds and both seats:
+- Win rate: `2.5%`
+- Average score diff: `-2060.10`
+- V6.3 baseline on the same broad suite:
+- Average score diff: `-2279.40`
+- V6.6 vs current [main.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/main.py:1) over 20 seeds and both seats:
+- Win rate: `72.5%`
+- Average score diff: `+1300.50`
+- V6.3 baseline vs current `main.py`:
+- Win rate: `55.0%`
+- Average score diff: `+929.95`
+
+Decision:
+- Promote V6.6 as the new best current research branch.
+
+Takeaway:
+- Shot-quality cleanup was worth doing.
+- Sun loss was not the big lever, but fixing rotating friendly-planet aiming materially reduced wasted launches and improved both `hairate` and `main.py` results.
+
+## 2026-06-07 - Search baseline fix and attack re-aim probe
+
+Goal:
+- Clean up the tuning tool so benchmark sweeps compare against each bot's real baseline.
+- Probe the next shot-quality hypothesis: attack candidates may also be aiming with the wrong ship-speed assumption.
+
+Change:
+- Fixed [search_planner_params.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/search_planner_params.py:1) so sweeps now start from the bot module's actual `CONFIG_2P` / `CONFIG_4P`, not from a generic `PlannerConfig()` default.
+- Extended [audit_shots.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/audit_shots.py:1) to break out `wrong_planet_hit_guess` by:
+- target kind
+- rotating/static
+- ship bucket
+- target production
+- Added [main_v6_7_attack_reaim.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/bots/main_v6_7_attack_reaim.py:1), based on V6.6.
+- V6.7 recomputes attack intercepts with the actual final `send` size and validates the intercept window before firing.
+
+Audit evidence:
+- V6.6 wrong-hit heuristic over seeds `0-9`, both seats vs `bots/hairate.py`:
+- `wrong_planet_hit_guess=630` (`40.6%`)
+- split: `enemy=310`, `neutral=260`, `friendly=60`
+- mostly `static=425` rather than `rotating=205`
+- mostly medium fleets: `16-31 ships = 219`, `8-15 ships = 175`
+- V6.7 over the same suite:
+- `wrong_planet_hit_guess=536` (`40.5%`)
+- but `sun_loss` worsened: `13 -> 26`
+- and `out_of_bounds` worsened: `48 -> 61`
+
+Match evidence:
+- V6.7 vs `bots/hairate.py` over 20 seeds and both seats:
+- Average score diff: `-2221.07`
+- V6.6 baseline:
+- Average score diff: `-2060.10`
+- V6.7 vs current [main.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/main.py:1):
+- Win rate: `50.0%`
+- Average score diff: `+340.82`
+- V6.6 baseline vs current `main.py`:
+- Win rate: `72.5%`
+- Average score diff: `+1300.50`
+
+Decision:
+- Keep the search baseline fix.
+- Reject V6.7.
+- Keep V6.6 as the current best branch.
+
+Takeaway:
+- The next ROI was not "recompute every attack with final send size."
+- The earlier fix was the good one: stale aiming on rotating friendly targets.
+- The remaining wrong-hit bucket appears to be mostly enemy and neutral attacks on static targets, so the next useful investigation should focus there rather than friendly-target motion.
+
+## 2026-06-07 14:37 V6.8 attack lane filter + evaluate stdout fix
+
+Changes:
+- Added [main_v6_8_attack_lane_filter.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/bots/main_v6_8_attack_lane_filter.py:1), based on V6.6.
+- Added `path_has_intercept_conflict(...)` to reject attack candidates whose route appears to pass through another planet before the intended target.
+- Fixed [evaluate.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/evaluate.py:1) so single-worker runs no longer silence their own summary output.
+
+Quick audit:
+- V6.8 vs `bots/hairate.py`, seeds `0-9`, both seats:
+- `launches=1369`
+- `sun_loss=14` (`1.0%`)
+- `out_of_bounds=52` (`3.8%`)
+- `wrong_planet_hit_guess=568` (`41.5%`)
+- Compared with V6.6:
+- `out_of_bounds` worsened from `48` to `52`
+- `wrong_planet_hit_guess` worsened from `40.6%` to `41.5%`
+
+Quick match check on seeds `0-3`, both seats:
+- V6.8 vs `bots/hairate.py`: `0/8` wins, average score diff `-1948.38`
+- V6.6 baseline vs `bots/hairate.py`: `1/8` wins, average score diff `-1142.25`
+- V6.8 vs current [main.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/main.py:1): `6/8` wins, average score diff `+1144.25`
+- V6.6 baseline vs current `main.py`: `5/8` wins, average score diff `-99.62`
+
+Decision:
+- Reject V6.8 as the next main research branch.
+- Keep V6.6 as the best current branch.
+
+Takeaway:
+- A simple route-conflict filter on attack shots is too blunt in its current form.
+- It can improve some local `main.py` matchups while still clearly hurting the `hairate` objective.
+
+## 2026-06-07 14:45 V6.9 attack ambiguity penalty
+
+Changes:
+- Added [main_v6_9_attack_ambiguity_penalty.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/bots/main_v6_9_attack_ambiguity_penalty.py:1), based on V6.6.
+- Instead of hard-rejecting suspicious attack paths, added `attack_ambiguity_penalty(...)` to downscore attacks whose heading overlaps with a nearer planet lane.
+- Kept the change narrow: attack scoring only, no planner-wide structural changes.
+
+Quick gate results, seeds `0-3`, both seats:
+- V6.9 vs `bots/hairate.py`: `2/8` wins, average score diff `+107.75`
+- V6.6 baseline vs `bots/hairate.py`: `1/8` wins, average score diff `-1142.25`
+- V6.9 vs current [main.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/main.py:1): `3/8` wins, average score diff `+91.25`
+- V6.6 baseline vs current `main.py`: `5/8` wins, average score diff `-99.62`
+
+Audit on the same short suite vs `bots/hairate.py`:
+- `launches=886`
+- `out_of_bounds=36` (`4.1%`)
+- `wrong_planet_hit_guess=287` (`32.4%`)
+- This is a noticeable drop in guessed wrong hits relative to the earlier V6.6 long audit (`40.6%`), though with a shorter sample and a slight increase in `out_of_bounds`.
+
+Broader check, seeds `0-9`, both seats:
+- V6.9 vs `bots/hairate.py`: `2/20` wins, average score diff `-1383.55`
+- V6.6 baseline vs `bots/hairate.py`: `1/20` wins, average score diff `-1878.20`
+- V6.9 vs current `main.py`: `11/20` wins, average score diff `+1596.65`
+- V6.6 baseline vs current `main.py`: `13/20` wins, average score diff `+1705.15`
+
+Decision:
+- Keep V6.9 as the new best `hairate`-focused V6 branch.
+- Do not promote it as a general replacement yet, because it gives back a little against current `main.py`.
+
+Takeaway:
+- A soft ambiguity penalty works much better than the earlier hard lane filter.
+- This is the kind of result-oriented V6.6-line change we want: narrow, measurable, and actually better against the main target.
+
+## 2026-06-07 15:11 Research loop automation
+
+Changes:
+- Added [run_research_loop.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/run_research_loop.py:1).
+- The runner evaluates a candidate bot against configured opponents, runs optional shot audit, writes `results.jsonl`, `run.json`, and a compact `summary.md`.
+- Added `--baseline` support so candidate-vs-baseline deltas are computed automatically on the same seeds/seats/opponents.
+- Updated [.gitignore](C:/Users/yuu98/Desktop/kaggle/orbit-wars/.gitignore:1) to ignore generated `research_runs/` outputs and temporary evaluation files.
+
+Smoke checks:
+- `py_compile` passed.
+- `smoke_v69_gate` ran V6.9 on the gate suite:
+- vs `bots/hairate.py`: `2/8` wins, average score diff `+107.75`
+- vs current `main.py`: `3/8` wins, average score diff `+91.25`
+- shot audit summary was written under `research_runs/smoke_v69_gate/`.
+- `smoke_v610_vs_v69` ran V6.10 against V6.9 baseline:
+- hairate delta: win `-12.5%`, average diff `-1093.62`
+- main delta: win `+0.0%`, average diff `+0.00`
+
+Decision:
+- Use `run_research_loop.py` as the default gate for new V6.9-line candidates.
+- This should reduce Codex turns spent on repeated command construction, result gathering, and manual comparison.
+
+## 2026-06-07 15:24 V6.11 prod1 strict and V6.12 attack confidence
+
+Changes:
+- Added [main_v6_11_prod1_strict.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/bots/main_v6_11_prod1_strict.py:1), based on V6.9.
+- V6.11 aggressively gated `prod1` neutral attacks by support distance and enemy pressure, plus an extra score penalty.
+- Added [main_v6_12_attack_confidence_bonus.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/bots/main_v6_12_attack_confidence_bonus.py:1), also based on V6.9.
+- V6.12 kept the ambiguity penalty and added a soft confidence bonus for attacks with cleaner lanes, closer support, high production, and static targets.
+
+V6.11 gate result (`v611_vs_v69_gate`):
+- vs `bots/hairate.py`: `0/8` wins, average score diff `-1922.00`
+- baseline V6.9 on same suite: `2/8` wins, average score diff `+107.75`
+- vs current `main.py`: `4/8` wins, average score diff `+1480.38`
+
+Decision for V6.11:
+- Reject.
+- It reduced some low-value neutral noise, but it clearly cut too much attacking power against the main target.
+
+V6.12 gate result (`v612_vs_v69_gate`):
+- vs `bots/hairate.py`: `2/8` wins, average score diff `-411.88`
+- vs current `main.py`: `8/8` wins, average score diff `+3280.50`
+
+V6.12 broader result (`v612_vs_v69_standard`):
+- vs `bots/hairate.py`: `2/20` wins, average score diff `-1694.65`
+- baseline V6.9 on same suite: `2/20` wins, average score diff `-1383.55`
+- vs current `main.py`: `19/20` wins, average score diff `+2671.25`
+- baseline V6.9 on same suite: `11/20` wins, average score diff `+1596.65`
+
+Focused benchmark check (`v612_vs_v69_hairate_focus`):
+- `hairate_focus_2p`: `0/20` wins, average score diff `-2120.65`
+
+Decision for V6.12:
+- Do not replace V6.9 as the `hairate`-focused branch.
+- Keep V6.12 as an interesting generalist candidate because it is much stronger against current `main.py`.
+
+Takeaway:
+- The `prod1` strict gate was too blunt.
+- The confidence-bonus idea is directionally useful, but in its current form it improves local/general matchups more than the hard target benchmark.
+
+## 2026-06-07 16:02 opening experiments V6.13-V6.15
+
+Changes:
+- Added [main_v6_13_opening_bias.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/bots/main_v6_13_opening_bias.py:1).
+- V6.13 only added a light opening bias in shortlist ranking.
+- Added [main_v6_14_opening_layer.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/bots/main_v6_14_opening_layer.py:1).
+- V6.14 introduced a much harder opening-only layer with explicit neutral filtering.
+- Added [main_v6_15_opening_params.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/bots/main_v6_15_opening_params.py:1).
+- V6.15 backed off from hard filters and instead used `hairate`-style opening parameters: neutral travel cap, low-prod soft skip, static/support bonuses, and early enemy de-prioritization.
+
+V6.13 result:
+- Gate vs `bots/hairate.py`: unchanged from V6.9 (`2/8`, diff `+107.75`)
+- `hairate3_ladder_2p`: slightly worse than V6.9 (`-1919.68` vs `-1906.92`)
+- Decision: reject; too weak to matter.
+
+V6.14 result:
+- Gate vs `bots/hairate.py`: `0/8`, diff `-2442.62`
+- Gate vs current `main.py`: `0/8`, diff `-2874.38`
+- `hairate3_ladder_2p`: `1/60`, diff `-1974.68`
+- Decision: reject; opening layer was far too aggressive and cut good options.
+
+V6.15 result:
+- Gate vs `bots/hairate.py`: `2/8`, diff `-87.50`
+- Gate vs current `main.py`: `1/8`, diff `-2104.25`
+- `hairate3_ladder_2p`: `2/60`, diff `-1841.48`
+- Compared with V6.9 on `hairate3_ladder_2p`, V6.15 improved average diff (`-1841.48` vs `-1906.92`).
+- But it badly regressed against current `main.py`.
+
+Takeaway:
+- The opening weakness is real.
+- A light opening bias is too weak, and a hard opening layer is too destructive.
+- V6.15 is the first opening experiment that helped one hard benchmark (`hairate3_ladder_2p`), but it is still not a promotion candidate because the regression against `main.py` is too large.
+
+## 2026-06-07 15:31 hairate2 benchmark setup
+
+Context:
+- Checked whether `bots/hairate2.py` should be included as another regular benchmark target.
+- `bots/hairate2.py` imports repo-local `bots/orbit_lite` plus external `torch`.
+
+Environment check:
+- In the current `C:\\tmp\\ow` environment, importing `torch` failed with `ModuleNotFoundError`.
+- That means `hairate2` is not currently a fair always-on benchmark in this local setup, because it cannot run as intended without additional dependencies.
+
+Changes:
+- Added [hairate2_fixed_2p.json](C:/Users/yuu98/Desktop/kaggle/orbit-wars/benchmarks/hairate2_fixed_2p.json:1).
+- Added [hairate2_focus_2p.json](C:/Users/yuu98/Desktop/kaggle/orbit-wars/benchmarks/hairate2_focus_2p.json:1).
+- Both benchmark files document that `torch` is required.
+
+Decision:
+- `hairate2` should be part of the benchmark set eventually.
+- But for now, `hairate` remains the primary trustworthy strong-opponent benchmark in this environment.
+
+## 2026-06-07 16:31 V6.16-V6.19 aggressive opening/pressure experiments
+
+Context:
+- User wanted a bigger experiment, not only small manual scoring tweaks.
+- The target was to preserve the `main.py` 90%+ local win-rate requirement while continuing the longer `hairate`/`hairate3` research line.
+
+Changes:
+- Added [main_v6_16_aggressive_opening_confidence.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/bots/main_v6_16_aggressive_opening_confidence.py:1).
+- V6.16 combined V6.12's confidence attack layer with a much stronger `hairate`-style opening neutral shape layer.
+- Added [main_v6_17_soft_opening_aggression.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/bots/main_v6_17_soft_opening_aggression.py:1).
+- V6.17 softened V6.16 by removing the hard opening neutral travel filter and reducing opening neutral bonuses/penalties.
+- Added [main_v6_18_early_enemy_pressure.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/bots/main_v6_18_early_enemy_pressure.py:1).
+- V6.18 left neutral opening alone and instead boosted early pressure on enemy high-production planets.
+- Added [main_v6_19_soft_opening_pressure_hybrid.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/bots/main_v6_19_soft_opening_pressure_hybrid.py:1).
+- V6.19 combined V6.17's soft opening shaping with a stronger early high-production enemy pressure bonus.
+
+Results vs V6.12 baseline:
+- V6.16 gate: `hairate` unchanged at `2/8`, diff improved by `+72.25`; `main.py` collapsed to `4/8`, so reject as too disruptive.
+- V6.17 gate: `hairate` and `main.py` identical to V6.12 on gate; `hairate3_ladder_2p` diff `-1829.02`.
+- V6.18 gate: `hairate` unchanged at `2/8`, diff improved by `+43.50`; `main.py` stayed `8/8`; `hairate3_ladder_2p` worsened to `-1858.62`.
+- V6.19 gate: `hairate` unchanged at `2/8`, diff improved by `+43.50`; `main.py` stayed `8/8`; `hairate3_ladder_2p` matched V6.17 at `-1829.02`.
+- V6.19 standard: `hairate` `2/20`, average diff `-1618.75` (`+75.90` vs V6.12); `main.py` `19/20`, average diff `+2568.55`.
+
+Decision:
+- Reject V6.16 despite hard-benchmark movement because it violates the `main.py` stability requirement.
+- Keep V6.17 as a safe opening-shape branch.
+- Keep V6.19 as the best current generalist branch from this batch: it preserves `main.py` 95% on standard while improving `hairate` average diff vs V6.12.
+- V6.9 remains better than V6.19 for pure `hairate` average diff, but V6.19 is much stronger than V6.9 against current `main.py`.
+
+Takeaway:
+- Hard copying `hairate` opening filters is dangerous.
+- Soft opening shaping plus early enemy production pressure is a more stable direction.
+- The next likely high-value step is an automated parameter sweep over the V6.19 constants instead of another hand-tuned single branch.
+
+## 2026-06-07 15:36 hairate3 check
+
+Context:
+- Added a new local opponent candidate: [hairate3.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/bots/hairate3.py:1).
+
+Dependency check:
+- `hairate3.py` is pure Python in this repo layout.
+- Unlike `hairate2.py`, it does not require `torch`.
+- So it is easy to run and can be benchmarked immediately.
+
+Quick strength check, seeds `0-3`, both seats:
+- [main_v6_9_attack_ambiguity_penalty.py](C:/Users/yuu98/Desktop/kaggle/orbit-wars/bots/main_v6_9_attack_ambiguity_penalty.py:1) vs `bots/hairate3.py`: `8/8` wins, average score diff `+23269.25`
+- `bots/hairate.py` vs `bots/hairate3.py`: `8/8` wins, average score diff `+915.50`
+- `bots/hairate3.py` vs `bots/hairate.py`: `0/8` wins, average score diff `-915.50`
+
+Interpretation:
+- `hairate3` does not currently look like a stronger primary benchmark than `hairate`.
+- It may still be useful as an additional regression opponent, but not as the main "strong-opponent" target.
+
+Changes:
+- Added [hairate3_fixed_2p.json](C:/Users/yuu98/Desktop/kaggle/orbit-wars/benchmarks/hairate3_fixed_2p.json:1).
+- Added [hairate3_focus_2p.json](C:/Users/yuu98/Desktop/kaggle/orbit-wars/benchmarks/hairate3_focus_2p.json:1).

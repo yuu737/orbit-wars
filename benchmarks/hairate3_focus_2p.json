@@ -1,0 +1,13 @@
+{
+  "name": "hairate3_focus_2p",
+  "description": "Focused 2-player benchmark against hairate3 on the same collapse-heavy seeds as hairate_focus_2p.",
+  "players": 2,
+  "both_seats": true,
+  "opponents": [
+    "bots/hairate3.py"
+  ],
+  "seeds": [
+    1, 2, 5, 6, 9,
+    14, 15, 16, 17, 19
+  ]
+}

@@ -257,7 +257,8 @@ def main() -> None:
 
     start_time = time.perf_counter()
     if args.workers <= 1:
-        init_worker()
+        global _MAKE
+        _MAKE = load_environment()
         results = [run_game(task) for task in tasks]
     else:
         max_workers = min(args.workers, len(tasks))

@@ -1,0 +1,15 @@
+{
+  "name": "hairate2_fixed_2p",
+  "description": "Broad fixed 2-player benchmark against hairate2 over seeds 0-19 and both seats. Requires torch for bots/hairate2.py.",
+  "players": 2,
+  "both_seats": true,
+  "opponents": [
+    "bots/hairate2.py"
+  ],
+  "seeds": [
+    0, 1, 2, 3, 4,
+    5, 6, 7, 8, 9,
+    10, 11, 12, 13, 14,
+    15, 16, 17, 18, 19
+  ]
+}

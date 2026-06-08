@@ -27,7 +27,14 @@ def planet_stats(obs, player):
     }
 
 
-def classify(final_reward, survival, stats_by_turn):
+def score_diff(obs, player):
+    player_count = max((p[1] for p in obs["planets"] if p[1] >= 0), default=player) + 1
+    my_score = total_ships(obs, player)
+    opponent_scores = [total_ships(obs, other) for other in range(player_count) if other != player]
+    return my_score - max(opponent_scores, default=0)
+
+
+def classify(final_reward, survival, stats_by_turn, final_diff):
     if final_reward == 1:
         return "win"
     early = stats_by_turn.get(50) or stats_by_turn.get(25)
@@ -37,9 +44,13 @@ def classify(final_reward, survival, stats_by_turn):
             return "opening_loss"
         return "early_defense_collapse"
     if mid and mid["production"] <= 8:
-        return "bad_overexpand_or_low_economy"
+        return "bad_overexpand"
     if survival <= 180:
         return "defense_collapse"
+    if survival >= 260 and final_diff < -900:
+        return "late_stall"
+    if final_diff < -1200:
+        return "endgame_waste"
     return "late_or_endgame_loss"
 
 
@@ -61,7 +72,8 @@ def run_one(agent, opponent, seed, players, seat):
 
     final_state = env.steps[-1][seat]
     final_stats = planet_stats(final_state.observation, seat)
-    label = classify(final_state.reward, survival, stats_by_turn)
+    final_stats["score_diff"] = score_diff(final_state.observation, seat)
+    label = classify(final_state.reward, survival, stats_by_turn, final_stats["score_diff"])
     return {
         "seed": seed,
         "seat": seat,
@@ -80,14 +92,20 @@ def main():
     parser.add_argument("--players", type=int, default=2, choices=(2, 4))
     parser.add_argument("--games", type=int, default=4)
     parser.add_argument("--seed-start", type=int, default=0)
+    parser.add_argument("--seed-list", default="")
     parser.add_argument("--both-seats", action="store_true")
     args = parser.parse_args()
+
+    if args.seed_list:
+        seeds = [int(seed.strip()) for seed in args.seed_list.split(",") if seed.strip()]
+    else:
+        seeds = [args.seed_start + offset for offset in range(args.games)]
 
     seats = range(args.players) if args.both_seats else (0,)
     counts = {}
     for seat in seats:
-        for offset in range(args.games):
-            result = run_one(args.agent, args.opponent, args.seed_start + offset, args.players, seat)
+        for seed in seeds:
+            result = run_one(args.agent, args.opponent, seed, args.players, seat)
             counts[result["label"]] = counts.get(result["label"], 0) + 1
             checkpoints = " ".join(
                 f"t{turn}:p{stats['planets']}/prod{stats['production']}/s{stats['ships']}"
@@ -95,7 +113,8 @@ def main():
             )
             print(
                 f"seed={result['seed']} seat={seat} reward={result['reward']} "
-                f"survival={result['survival']} label={result['label']} {checkpoints}"
+                f"survival={result['survival']} diff={result['final']['score_diff']} "
+                f"label={result['label']} {checkpoints}"
             )
 
     print("summary", " ".join(f"{key}={value}" for key, value in sorted(counts.items())))
