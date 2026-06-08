@@ -1,56 +1,87 @@
-"""Short-horizon board projection.
-
-V8.0 starts with a conservative projection: planet production over time.
-Fleet-arrival simulation will be added after the parser is verified against
-local Orbit Wars observations.
-"""
-from __future__ import annotations
-
-from dataclasses import dataclass
-from typing import Dict, List
-
-from .world import World
+import math
 
 
-@dataclass
-class PlanetProjection:
-    planet_id: int
-    owners: List[int]
-    ships: List[float]
+def resolve_planet_combat(owner, garrison, arrivals):
+    arrivals = {int(k): int(v) for k, v in arrivals.items() if int(v) > 0}
+    if not arrivals:
+        return int(owner), max(0, int(garrison))
+
+    ranked = sorted(arrivals.items(), key=lambda item: item[1], reverse=True)
+    top_owner, top_ships = ranked[0]
+    second_ships = ranked[1][1] if len(ranked) > 1 else 0
+    survivor = top_ships - second_ships
+    if survivor <= 0:
+        return int(owner), max(0, int(garrison))
+
+    if top_owner == owner:
+        return int(owner), max(0, int(garrison) + survivor)
+
+    if survivor > garrison:
+        return int(top_owner), int(survivor - garrison)
+    return int(owner), int(garrison - survivor)
 
 
-@dataclass
-class Projection:
-    horizon: int
-    planets: Dict[int, PlanetProjection]
+def project_planet_states(
+    planets,
+    fleets,
+    player,
+    horizon,
+    Projection,
+    fleet_points_toward_planet,
+    fleet_eta_to_planet,
+):
+    owner_by_id = {}
+    ships_by_id = {}
+    incoming_by_id = {}
+    first_loss_turn_by_id = {}
 
-    def owner_at(self, planet_id: int, turn: int) -> int:
-        p = self.planets[planet_id]
-        return p.owners[min(max(turn, 0), self.horizon)]
+    for planet in planets:
+        owner_by_id[planet.id] = [int(planet.owner)] + [int(planet.owner)] * horizon
+        ships_by_id[planet.id] = [int(planet.ships)] + [int(planet.ships)] * horizon
+        incoming_by_id[planet.id] = [dict() for _ in range(horizon + 1)]
+        first_loss_turn_by_id[planet.id] = None
 
-    def ships_at(self, planet_id: int, turn: int) -> float:
-        p = self.planets[planet_id]
-        return p.ships[min(max(turn, 0), self.horizon)]
+    planet_by_id = {planet.id: planet for planet in planets}
 
+    for fleet in fleets:
+        best_planet = None
+        best_eta = None
+        for planet in planets:
+            if not fleet_points_toward_planet(fleet, planet):
+                continue
+            eta = fleet_eta_to_planet(fleet, planet)
+            if eta <= horizon and (best_eta is None or eta < best_eta):
+                best_planet = planet
+                best_eta = eta
 
-def project_world(world: World, horizon: int = 20) -> Projection:
-    """Project owner/ships for each planet.
+        if best_planet is None or best_eta is None:
+            continue
 
-    Current version:
-    - owned planets gain production every turn
-    - neutral planets do not grow
-    - fleet arrivals are not applied yet
+        turn = max(1, min(horizon, int(math.ceil(best_eta))))
+        arrivals = incoming_by_id[best_planet.id][turn]
+        arrivals[int(fleet.owner)] = arrivals.get(int(fleet.owner), 0) + int(fleet.ships)
 
-    This is intentionally simple so V8.0 can match V7 behavior first.
-    """
-    horizon = max(0, int(horizon))
-    planets: Dict[int, PlanetProjection] = {}
-    for p in world.planets:
-        owners: List[int] = []
-        ships: List[float] = []
-        for t in range(horizon + 1):
-            owners.append(p.owner)
-            grown = p.ships + (p.production * t if p.owner >= 0 else 0.0)
-            ships.append(max(0.0, float(grown)))
-        planets[p.id] = PlanetProjection(planet_id=p.id, owners=owners, ships=ships)
-    return Projection(horizon=horizon, planets=planets)
+    for planet_id, planet in planet_by_id.items():
+        owner = int(planet.owner)
+        ships = int(planet.ships)
+        for turn in range(1, horizon + 1):
+            if owner >= 0:
+                ships += int(planet.production)
+
+            owner, ships = resolve_planet_combat(
+                owner,
+                ships,
+                incoming_by_id[planet_id][turn],
+            )
+            owner_by_id[planet_id][turn] = owner
+            ships_by_id[planet_id][turn] = ships
+
+            if first_loss_turn_by_id[planet_id] is None and planet.owner == player and owner != player:
+                first_loss_turn_by_id[planet_id] = turn
+
+    return Projection(
+        owner_by_id,
+        ships_by_id,
+        incoming_by_id,
+        first_loss_turn_by_id,
+    )

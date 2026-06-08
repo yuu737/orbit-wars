@@ -1,28 +1,56 @@
-"""Safety calculations such as safe_drain.
-
-These functions are small and explicit first. Later versions can account for
-incoming enemy fleets and moving planets.
-"""
-from __future__ import annotations
-
-from .world import Planet, World
-from .projection import Projection
-
-
-def reserve_for_planet(planet: Planet, world: World, projection: Projection | None = None) -> float:
-    """Return minimum ships to leave on a source planet.
-
-    Initial heuristic:
-    - home/high-production planets keep more reserve
-    - low production planets can drain more aggressively
-    """
-    base = 3.0
-    prod_reserve = max(0.0, planet.production) * 1.5
-    high_value = 6.0 if planet.production >= 4 else 0.0
-    return base + prod_reserve + high_value
+def base_reserve(planet, current_step, is_2p):
+    if current_step < 90:
+        return max(1, planet.production // 2 + 1) if is_2p else max(2, planet.production)
+    if current_step < 160:
+        return max(3, planet.production + 1) if is_2p else max(5, planet.production * 2)
+    if current_step > 430:
+        return max(7, planet.production * 3) if is_2p else max(10, planet.production * 4)
+    return max(4, planet.production * 2) if is_2p else max(6, planet.production * 3)
 
 
-def safe_drain(planet: Planet, world: World, projection: Projection | None = None) -> float:
-    """Maximum ships that can be launched without emptying the source."""
-    reserve = reserve_for_planet(planet, world, projection)
-    return max(0.0, planet.ships - reserve)
+def frontline_reserve_bonus(planet, planets, player, current_step, is_2p, distance):
+    if current_step < 85:
+        return 0
+
+    bonus = 0
+    for enemy in planets:
+        if enemy.owner in (-1, player):
+            continue
+
+        dist = distance(enemy, planet)
+        if dist > (28.0 if is_2p else 22.0):
+            continue
+
+        if int(enemy.ships) < int(planet.ships) + int(planet.production) * 2:
+            continue
+
+        local = int(planet.production) + 2
+        if planet.production >= 4:
+            local += 3
+        if dist < 18:
+            local += 2
+
+        bonus = max(bonus, local)
+
+    return min(bonus, 10 if is_2p else 7)
+
+
+def safe_drain(source, projection, planets, player, config, current_step, is_2p, base_reserve, frontline_reserve_bonus):
+    owner_traj = projection.owner_by_id[source.id]
+    ships_traj = projection.ships_by_id[source.id]
+    held_slack = []
+
+    for turn in range(1, min(config.defense_horizon, len(owner_traj) - 1) + 1):
+        if owner_traj[turn] == player and ships_traj[turn] > 0:
+            held_slack.append(int(ships_traj[turn]))
+
+    if held_slack:
+        drain = min(int(source.ships), min(held_slack))
+    else:
+        drain = int(source.ships)
+
+    reserve = base_reserve(source, current_step, is_2p)
+    reserve += frontline_reserve_bonus(source, planets, player, current_step, is_2p)
+    reserve += config.reserve_margin
+
+    return max(0, min(int(source.ships) - reserve, drain))
