@@ -1,0 +1,15 @@
+Traceback (most recent call last):
+  File "bots\my_v8_3_simulator_bot.py", line 262, in agent
+    lite_candidates = _lite.build_lite_candidates(
+        my_planets,
+    ...<11 lines>...
+        predict_intercept_position,
+    )
+  File "C:\Users\yuu98\Desktop\kaggle\orbit-wars\my_orbit\lite_planner.py", line 133, in build_lite_candidates
+    score = evaluate_candidate(target, send, eta, player, projection, int(horizon))
+  File "C:\Users\yuu98\Desktop\kaggle\orbit-wars\my_orbit\lite_planner.py", line 22, in evaluate_candidate
+    base_incomings = get_incoming_list(False)
+  File "C:\Users\yuu98\Desktop\kaggle\orbit-wars\my_orbit\lite_planner.py", line 16, in get_incoming_list
+    inc = incoming.get(t, {}).copy()
+          ^^^^^^^^^^^^
+AttributeError: 'list' object has no attribute 'get'

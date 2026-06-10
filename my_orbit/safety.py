@@ -49,8 +49,9 @@ def safe_drain(source, projection, planets, player, config, current_step, is_2p,
     else:
         drain = int(source.ships)
 
-    reserve = base_reserve(source, current_step, is_2p)
-    reserve += frontline_reserve_bonus(source, planets, player, current_step, is_2p)
-    reserve += config.reserve_margin
+    # Remove static heuristics to emulate hairate2
+    # reserve = base_reserve(source, current_step, is_2p)
+    # reserve += frontline_reserve_bonus(source, planets, player, current_step, is_2p)
+    reserve = config.reserve_margin
 
-    return max(0, min(int(source.ships) - reserve, drain))
+    return max(0, drain - reserve)
