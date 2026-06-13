@@ -2,6 +2,8 @@
 
 Conquer planets rotating around a sun in continuous 2D space. A real-time strategy game for 2 or 4 players.
 
+For Kaggle Notebook CPU experiments using this repository directly from GitHub, see [KAGGLE_CPU.md](KAGGLE_CPU.md).
+
 ## Overview
 
 Players start with a single home planet and compete to control the map by sending fleets to capture neutral and enemy planets. The board is a 100x100 continuous space with a sun at the center. Planets orbit the sun, comets fly through on elliptical trajectories, and fleets travel in straight lines. The game lasts 500 turns. The player with the most total ships (on planets + in fleets) at the end wins.
