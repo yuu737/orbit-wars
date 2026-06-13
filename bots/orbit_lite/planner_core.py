@@ -73,17 +73,22 @@ def make_launch_set(
 
 
 def competitive_score(diff: GarrisonFlowDiff, *, player_id: int) -> Tensor:
-    """Competitive score: ``Δnet_me − Σ_opp Δnet_opp``.
+    """Competitive score: ``Δnet_me − max_opp Δnet_opp``.
 
     ``diff.net_ship_delta`` is ``[*prefix, A]`` (per-player change in net ships
-    gained = produced − lost-to-combat); returns ``[*prefix]``. The opponent term
-    is the equal-weight sum over rivals, so a launch is worth my net gain minus
-    the opponents' net gain.
+    gained = produced − lost-to-combat); returns ``[*prefix]``.
     """
     net = diff.net_ship_delta                       # [*prefix, A]
     me = net[..., int(player_id)]
-    opp = net.sum(dim=-1) - me
-    return me - opp
+    
+    A = int(net.shape[-1])
+    if A <= 1:
+        return me
+    mask = torch.arange(A, device=net.device) != int(player_id)
+    opp_net = torch.where(mask, net, torch.full_like(net, float("-inf")))
+    max_opp = opp_net.max(dim=-1).values
+    
+    return me - max_opp
 
 
 def score_candidates(
@@ -282,7 +287,18 @@ def build_target_shortlist(
 
     attack_mask = attack_target_mask(obs, obs_tensors)
     proximity = min_distance_to_targets(cache, source_mask, attack_mask, max_k=K_eta)
-    attack_pref = torch.where(attack_mask, -proximity, torch.full_like(proximity, float("-inf")))
+    
+    # --- V12 ROI Target Shortlist ---
+    # Cost = projected defenders at end of horizon + distance delay
+    cost = garrison_status.ships[..., -1] + 1.0
+    # Base value: enemies are always worth something even if prod=0
+    base_value = torch.where(obs.is_enemy, 1.0, 0.0)
+    value = prod + base_value
+    # Distance effectively increases the cost (takes longer to arrive -> enemy produces more / we lose time)
+    eff_cost = cost + proximity * 0.2 * value
+    roi = value / eff_cost.clamp(min=1e-3)
+    
+    attack_pref = torch.where(attack_mask, roi, torch.full_like(proximity, float("-inf")))
     atk_idx, atk_exists = _candidate_indices(attack_pref, attack_mask, n_attack)
 
     if R > 0:
