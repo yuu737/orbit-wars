@@ -1,0 +1,38 @@
+{
+  "config_2p": {
+    "max_regroup_targets_per_source": 4,
+    "max_regroup_time": 5.0,
+    "max_waves_per_turn": 6,
+    "min_ships_to_launch": 3.0,
+    "reinforce_size_beta": 2.2,
+    "response_search_enabled": true,
+    "response_search_turns": 220,
+    "response_search_top_my": 40,
+    "response_search_enemy_sources": 5,
+    "response_search_enemy_targets": 7,
+    "response_search_enemy_top": 12,
+    "response_search_enemy_threshold": 1.1,
+    "response_search_penalty_weight": 0.5,
+    "response_search_size_multipliers": [
+      0.75,
+      1.0
+    ],
+    "size_multipliers": [
+      1.0
+    ]
+  },
+  "config_4p": {
+    "horizon": 15,
+    "max_offensive_targets": 14,
+    "max_regroup_targets_per_source": 4,
+    "max_regroup_time": 5.0,
+    "max_sources_per_lane": 8,
+    "min_ships_to_launch": 3.0,
+    "reinforce_size_beta": 0.0,
+    "size_multipliers": [
+      0.33,
+      0.66,
+      1.0
+    ]
+  }
+}

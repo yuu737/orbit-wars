@@ -1,0 +1,737 @@
+
+from __future__ import annotations
+
+import dataclasses
+import os
+import sys
+from dataclasses import dataclass
+
+try:
+    _HERE = os.path.dirname(os.path.abspath(__file__))
+except NameError:
+    _HERE = os.getcwd()
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+
+import torch
+from torch import Tensor
+
+from orbit_lite.geometry import fleet_speed
+from orbit_lite.garrison_launch import LaunchSet
+from orbit_lite.intercept_aim import intercept_angle
+from orbit_lite.movement import MovementConfig, PlanetMovement
+from orbit_lite.movement_step import (
+    apply_private_planned_launches,
+    concat_launch_entries,
+    disambiguate_duplicate_launches,
+    ensure_planet_movement,
+    infer_planned_launches_from_entries,
+)
+from orbit_lite.obs import parse_obs
+from orbit_lite.distance_cache import build_distance_cache
+from orbit_lite.planner_core import (
+    _candidate_indices,
+    _empty_entries,
+    _greedy_select,
+    _plan_regroup,
+    build_target_shortlist,
+    capture_floor,
+    empty_action_row,
+    entries_to_sparse_payload,
+    largest_initial_player_count,
+    make_launch_set,
+    reachable_mask,
+    safe_drain,
+    score_candidates,
+)
+from orbit_lite.adapter import single_obs_to_tensor, sparse_action_row_to_moves
+
+TOTAL_STEPS = 500
+
+
+@dataclass(frozen=True)
+class ProducerLiteConfig:
+    """Behaviour knobs."""
+
+    horizon: int = 18
+    max_sources_per_lane: int = 12
+    max_offensive_targets: int = 12
+    max_defensive_targets: int = 4
+    max_waves_per_turn: int = 6
+    roi_threshold: float = 1.5
+    min_ships_to_launch: float = 4.0
+    enable_regroup: bool = True
+    max_regroup_time: float = 7.0
+    regroup_pressure_delta_min: float = 0.25
+    max_regroup_sources_per_lane: int = 6
+    max_regroup_targets_per_source: int = 7
+    regroup_pressure_norm: str = "none"
+    regroup_time_penalty_weight: float = 1e-3
+    terminal_phase_turns: int = 40
+    terminal_roi_threshold: float = 1.0
+    terminal_max_waves_per_turn: int = 9
+    terminal_enable_regroup: bool = False
+    # --- exp41: evaluate several commit fractions per (src, tgt) ------------
+    size_multipliers: tuple[float, ...] = (0.5, 0.75, 1.0)
+    reactive_eval: bool = True
+    reactive_target_weight: float = 0.20
+    reactive_source_weight: float = 0.0
+    reactive_response_turns: float = 8.0
+    response_search_enabled: bool = True
+    response_search_start_turn: int = 35
+    response_search_turns: int = 260
+    response_search_top_my: int = 48
+    response_search_enemy_sources: int = 6
+    response_search_enemy_targets: int = 8
+    response_search_enemy_top: int = 18
+    response_search_enemy_threshold: float = 1.1
+    response_search_penalty_weight: float = 0.65
+    response_search_size_multipliers: tuple[float, ...] = (0.75, 1.0)
+
+
+def _movement_config(config: ProducerLiteConfig, *, player_count: int) -> MovementConfig:
+    return MovementConfig(
+        movement_horizon=int(config.horizon),
+        drift_epsilon=1e-3,
+        track_fleets=True,
+        player_count=int(player_count),
+        max_tracked_fleets=128,
+    )
+
+
+def _apply_phase_config(config: ProducerLiteConfig, step: int) -> ProducerLiteConfig:
+    if int(step) >= TOTAL_STEPS - int(config.terminal_phase_turns):
+        return dataclasses.replace(
+            config,
+            roi_threshold=float(config.terminal_roi_threshold),
+            max_waves_per_turn=int(config.terminal_max_waves_per_turn),
+            enable_regroup=bool(config.terminal_enable_regroup),
+        )
+    return config
+
+
+def cheap_enemy_pressure(obs, cache, *, horizon: float, player_id: int) -> Tensor:
+    P = int(obs.P)
+    device = obs.device
+    dtype = obs.ships.dtype
+    if P == 0:
+        return torch.zeros(P, dtype=dtype, device=device)
+    d0 = cache.cross_dist[0].to(dtype)
+    ships = obs.ships.to(dtype)
+    speeds = fleet_speed(ships.clamp(min=1e-6))
+    reach_dist = (speeds.view(P, 1) * float(horizon)).clamp(min=1e-6)
+    enemy = obs.alive & (obs.owner_abs >= 0) & (obs.owner_abs != int(player_id))
+    eye = torch.eye(P, device=device, dtype=torch.bool)
+    valid = enemy.view(P, 1) & obs.alive.view(1, P) & ~eye
+    decay = (1.0 - d0 / reach_dist).clamp(min=0.0)
+    contrib = torch.where(valid, ships.view(P, 1) * decay, torch.zeros_like(decay))
+    return contrib.sum(dim=0)
+
+
+def _tier_candidates(
+    *,
+    movement: PlanetMovement,
+    obs,
+    cache,
+    source_idx: Tensor,
+    source_exists: Tensor,
+    target_idx: Tensor,
+    target_exists: Tensor,
+    target_is_mine: Tensor,
+    drain: Tensor,
+    floor: Tensor,
+    eta_cap: Tensor,
+    size_mult: float,
+    S: int,
+    T: int,
+    H: int,
+    config: ProducerLiteConfig,
+    pid: int,
+    garrison_status,
+    prod: Tensor,
+    alive_by_step: Tensor,
+    player_count: int,
+    device,
+    dtype,
+):
+    """Build scored candidates for one fleet-size fraction."""
+    sizes = (drain.view(S, 1) * float(size_mult)).floor().clamp(min=1.0).expand(S, T)
+    K = int(floor.shape[-1])
+
+    active = reachable_mask(
+        movement, source_idx=source_idx, target_idx=target_idx,
+        fleet_sizes=sizes.unsqueeze(-1), eta_cap=eta_cap,
+    ).squeeze(-1)
+    aim = intercept_angle(
+        movement,
+        source_idx.unsqueeze(1),
+        target_idx.unsqueeze(0),
+        sizes,
+        active=active,
+    )
+    angle = aim["angle"]
+    eta = aim["eta"]
+    viable = aim["viable"] & (eta <= eta_cap.view(1, T))
+
+    if K > 0:
+        k_arr = (eta.clamp(min=1.0, max=float(K)).ceil().long() - 1).clamp(0, K - 1)
+        floor_at_arr = floor.unsqueeze(0).expand(S, T, K).gather(-1, k_arr.unsqueeze(-1)).squeeze(-1)
+    else:
+        floor_at_arr = torch.ones(S, T, dtype=dtype, device=device)
+    clears_floor = sizes >= floor_at_arr
+
+    src_neq_tgt = source_idx.view(S, 1) != target_idx.view(1, T)
+    valid = (
+        viable & clears_floor & (sizes >= 1.0) & src_neq_tgt
+        & source_exists.view(S, 1) & target_exists.view(1, T)
+    )
+
+    L = 1
+    C = S * T
+    cand_src = source_idx.view(S, 1).expand(S, T).reshape(C, L)
+    cand_tgt_slot = target_idx.view(1, T).expand(S, T).reshape(C)
+    cand_tgt_short = torch.arange(T, device=device).view(1, T).expand(S, T).reshape(C)
+    cand_send = torch.where(valid, sizes, torch.zeros_like(sizes)).reshape(C, L)
+    cand_angle = angle.reshape(C, L)
+    cand_eta = torch.where(valid, eta, torch.ones_like(eta)).reshape(C, L)
+    cand_active = valid.reshape(C, L)
+    cand_valid = valid.reshape(C)
+    cand_is_def = target_is_mine[cand_tgt_short]
+
+    launches = make_launch_set(
+        source_slots=cand_src,
+        target_slots=cand_tgt_slot.unsqueeze(-1).expand(C, L),
+        ships=cand_send,
+        eta=cand_eta,
+        valid=cand_active & cand_valid.unsqueeze(-1),
+        player_id=pid,
+    )
+    score = score_candidates(
+        garrison_status, prod=prod, alive_by_step=alive_by_step,
+        player_count=int(player_count), launches=launches, player_id=pid,
+    )
+    score = torch.where(cand_valid, score, torch.full_like(score, float("-inf")))
+
+    if bool(config.reactive_eval) and int(player_count) <= 2 and int(obs.P) > 0:
+        P = int(obs.P)
+        enemy_mask = obs.is_enemy & obs.alive
+        if bool(enemy_mask.any()):
+            enemy_ships = torch.where(
+                enemy_mask,
+                obs.ships.to(dtype),
+                torch.zeros(P, dtype=dtype, device=device),
+            )
+            enemy_speed = fleet_speed(enemy_ships.clamp(min=1e-6)).clamp(min=1e-6)
+            enemy_active = enemy_mask.to(dtype)
+
+            src_safe = source_idx.clamp(0, P - 1)
+            tgt_safe = target_idx.clamp(0, P - 1)
+
+            dist_to_src = cache.cross_dist[0, :, src_safe].to(dtype)       # [P, S]
+            eta_to_src = dist_to_src / enemy_speed.view(P, 1)
+            src_decay = (1.0 - eta_to_src / max(float(H), 1.0)).clamp(min=0.0)
+            src_pressure = (enemy_ships.view(P, 1) * enemy_active.view(P, 1) * src_decay).sum(dim=0)  # [S]
+            source_after = obs.ships[src_safe].to(dtype).view(S, 1) - sizes
+            source_deficit = (src_pressure.view(S, 1) - source_after).clamp(min=0.0)
+
+            dist_to_tgt = cache.cross_dist[0, :, tgt_safe].to(dtype)       # [P, T]
+            eta_to_tgt = dist_to_tgt / enemy_speed.view(P, 1)
+            response_window = eta + float(config.reactive_response_turns)  # [S, T]
+            tgt_decay = (1.0 - eta_to_tgt.unsqueeze(0) / response_window.clamp(min=1.0).unsqueeze(1)).clamp(min=0.0)
+            eye = torch.eye(P, dtype=torch.bool, device=device)
+            not_same_planet = ~eye[:, tgt_safe].unsqueeze(0)
+            tgt_pressure = (
+                enemy_ships.view(1, P, 1)
+                * enemy_active.view(1, P, 1)
+                * tgt_decay
+                * not_same_planet.to(dtype)
+            ).sum(dim=1)  # [S, T]
+            target_margin = (sizes - floor_at_arr).clamp(min=0.0)
+            target_is_attack = ~target_is_mine.view(1, T)
+            target_deficit = (tgt_pressure - target_margin).clamp(min=0.0)
+            target_deficit = torch.where(target_is_attack, target_deficit, torch.zeros_like(target_deficit))
+
+            penalty = (
+                float(config.reactive_source_weight) * source_deficit
+                + float(config.reactive_target_weight) * target_deficit
+            )
+            score = score - penalty.reshape(C)
+
+    return cand_src, cand_send, cand_angle, cand_eta, cand_active, cand_tgt_slot, cand_tgt_short, cand_is_def, score
+
+
+def _enemy_player_id(obs, player_count: int, pid: int) -> int:
+    if int(player_count) == 2 and int(pid) in (0, 1):
+        return 1 - int(pid)
+    enemy_owner = obs.owner_abs[obs.is_enemy & obs.alive].long()
+    if int(enemy_owner.numel()) > 0:
+        return int(enemy_owner[0].item())
+    return 1 - int(pid) if int(pid) in (0, 1) else 0
+
+
+def _build_enemy_response_candidates(
+    *,
+    movement: PlanetMovement,
+    obs,
+    cache,
+    garrison_status,
+    prod: Tensor,
+    alive_by_step: Tensor,
+    config: ProducerLiteConfig,
+    player_count: int,
+    enemy_id: int,
+    my_attack_targets: Tensor,
+    K_eta: int,
+    H: int,
+    device,
+    dtype,
+) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+    P = int(obs.P)
+    if P <= 0:
+        z_long = torch.zeros(0, dtype=torch.long, device=device)
+        z = torch.zeros(0, dtype=dtype, device=device)
+        return z_long, z_long, z, z, z
+
+    enemy_source_mask = (
+        obs.alive
+        & (obs.owner_abs == int(enemy_id))
+        & (obs.ships >= float(config.min_ships_to_launch))
+    )
+    if not bool(enemy_source_mask.any()):
+        z_long = torch.zeros(0, dtype=torch.long, device=device)
+        z = torch.zeros(0, dtype=dtype, device=device)
+        return z_long, z_long, z, z, z
+
+    S_cap = max(1, min(int(config.response_search_enemy_sources), P))
+    source_idx, source_exists = _candidate_indices(obs.ships, enemy_source_mask, S_cap)
+    S = int(source_idx.shape[0])
+
+    forced_targets = torch.zeros(P, dtype=torch.bool, device=device)
+    if int(my_attack_targets.numel()) > 0:
+        forced_targets[my_attack_targets.clamp(0, P - 1)] = True
+    target_mask = obs.alive & (obs.owned | obs.is_neutral | forced_targets)
+    if not bool(target_mask.any()):
+        z_long = torch.zeros(0, dtype=torch.long, device=device)
+        z = torch.zeros(0, dtype=dtype, device=device)
+        return z_long, z_long, z, z, z
+
+    # Enemy replies care most about my exposed planets, good neutrals, and
+    # reinforcing the exact planet my candidate is trying to hit.
+    target_pref = prod.to(dtype) + 0.025 * obs.ships.to(dtype)
+    target_pref = target_pref + torch.where(obs.owned, torch.full_like(target_pref, 2.0), torch.zeros_like(target_pref))
+    target_pref = target_pref + torch.where(forced_targets, torch.full_like(target_pref, 4.0), torch.zeros_like(target_pref))
+    T_cap = max(1, min(int(config.response_search_enemy_targets), P))
+    target_idx, target_exists = _candidate_indices(target_pref, target_mask, T_cap)
+    T = int(target_idx.shape[0])
+
+    source_ships = obs.ships[source_idx.clamp(0, P - 1)].to(dtype)
+    H_eff = torch.full((), float(H), dtype=dtype, device=device)
+    drain = safe_drain(
+        garrison_status, source_idx=source_idx, source_ships=source_ships,
+        H_eff=H_eff, player_id=int(enemy_id),
+    )
+    eta_cap = torch.full((T,), float(K_eta), dtype=dtype, device=device)
+    floor = capture_floor(
+        garrison_status, target_idx=target_idx, k_max=K_eta,
+        capture_overhead=1.0, player_id=int(enemy_id),
+    )
+    K = int(floor.shape[-1])
+
+    parts = []
+    for mult in config.response_search_size_multipliers:
+        sizes = (drain.view(S, 1) * float(mult)).floor().clamp(min=1.0).expand(S, T)
+        active = reachable_mask(
+            movement, source_idx=source_idx, target_idx=target_idx,
+            fleet_sizes=sizes.unsqueeze(-1), eta_cap=eta_cap,
+        ).squeeze(-1)
+        aim = intercept_angle(
+            movement,
+            source_idx.unsqueeze(1),
+            target_idx.unsqueeze(0),
+            sizes,
+            active=active,
+        )
+        eta = aim["eta"]
+        viable = aim["viable"] & (eta <= eta_cap.view(1, T))
+        if K > 0:
+            k_arr = (eta.clamp(min=1.0, max=float(K)).ceil().long() - 1).clamp(0, K - 1)
+            floor_at_arr = floor.unsqueeze(0).expand(S, T, K).gather(-1, k_arr.unsqueeze(-1)).squeeze(-1)
+        else:
+            floor_at_arr = torch.ones(S, T, dtype=dtype, device=device)
+        valid = (
+            viable
+            & (sizes >= floor_at_arr)
+            & (sizes >= float(config.min_ships_to_launch))
+            & (source_idx.view(S, 1) != target_idx.view(1, T))
+            & source_exists.view(S, 1)
+            & target_exists.view(1, T)
+        )
+        C = S * T
+        e_src = source_idx.view(S, 1).expand(S, T).reshape(C)
+        e_tgt = target_idx.view(1, T).expand(S, T).reshape(C)
+        e_send = torch.where(valid, sizes, torch.zeros_like(sizes)).reshape(C)
+        e_angle = aim["angle"].reshape(C)
+        e_eta = torch.where(valid, eta, torch.ones_like(eta)).reshape(C)
+        e_valid = valid.reshape(C)
+        launches = make_launch_set(
+            source_slots=e_src.view(C, 1),
+            target_slots=e_tgt.view(C, 1),
+            ships=e_send.view(C, 1),
+            eta=e_eta.view(C, 1),
+            valid=e_valid.view(C, 1),
+            player_id=int(enemy_id),
+        )
+        e_score = score_candidates(
+            garrison_status, prod=prod, alive_by_step=alive_by_step,
+            player_count=int(player_count), launches=launches, player_id=int(enemy_id),
+        )
+        e_score = torch.where(e_valid, e_score, torch.full_like(e_score, float("-inf")))
+        parts.append((e_src, e_tgt, e_send, e_angle, e_eta, e_score))
+
+    e_src = torch.cat([p[0] for p in parts], dim=0)
+    e_tgt = torch.cat([p[1] for p in parts], dim=0)
+    e_send = torch.cat([p[2] for p in parts], dim=0)
+    e_angle = torch.cat([p[3] for p in parts], dim=0)
+    e_eta = torch.cat([p[4] for p in parts], dim=0)
+    e_score = torch.cat([p[5] for p in parts], dim=0)
+
+    natural = torch.isfinite(e_score) & (e_score > float(config.response_search_enemy_threshold))
+    if not bool(natural.any()):
+        z_long = torch.zeros(0, dtype=torch.long, device=device)
+        z = torch.zeros(0, dtype=dtype, device=device)
+        return z_long, z_long, z, z, z
+    ranked = torch.where(natural, e_score, torch.full_like(e_score, float("-inf")))
+    top_e = torch.argsort(ranked, descending=True, stable=True)[: max(1, int(config.response_search_enemy_top))]
+    top_e = top_e[torch.isfinite(ranked[top_e])]
+    return e_src[top_e], e_tgt[top_e], e_send[top_e], e_angle[top_e], e_eta[top_e]
+
+
+def _apply_response_search(
+    *,
+    movement: PlanetMovement,
+    obs,
+    cache,
+    garrison_status,
+    prod: Tensor,
+    alive_by_step: Tensor,
+    config: ProducerLiteConfig,
+    player_count: int,
+    step: int,
+    K_eta: int,
+    H: int,
+    cand_src: Tensor,
+    cand_send: Tensor,
+    cand_angle: Tensor,
+    cand_eta: Tensor,
+    cand_active: Tensor,
+    cand_tgt_slot: Tensor,
+    cand_is_def: Tensor,
+    score: Tensor,
+    device,
+    dtype,
+) -> Tensor:
+    if (
+        not bool(config.response_search_enabled)
+        or int(player_count) != 2
+        or int(step) < int(config.response_search_start_turn)
+        or int(step) >= int(config.response_search_turns)
+        or int(score.numel()) == 0
+    ):
+        return score
+
+    pid = int(obs.player_id)
+    attack = ~cand_is_def
+    viable_my = torch.isfinite(score) & attack & cand_active.all(dim=-1)
+    if not bool(viable_my.any()):
+        return score
+    ranked_my = torch.where(viable_my, score, torch.full_like(score, float("-inf")))
+    top_my = torch.argsort(ranked_my, descending=True, stable=True)[: max(1, int(config.response_search_top_my))]
+    top_my = top_my[torch.isfinite(ranked_my[top_my])]
+    if int(top_my.numel()) == 0:
+        return score
+
+    enemy_id = _enemy_player_id(obs, int(player_count), pid)
+    e_src, e_tgt, e_send, e_angle, e_eta = _build_enemy_response_candidates(
+        movement=movement,
+        obs=obs,
+        cache=cache,
+        garrison_status=garrison_status,
+        prod=prod,
+        alive_by_step=alive_by_step,
+        config=config,
+        player_count=int(player_count),
+        enemy_id=int(enemy_id),
+        my_attack_targets=cand_tgt_slot[top_my],
+        K_eta=int(K_eta),
+        H=int(H),
+        device=device,
+        dtype=dtype,
+    )
+    E = int(e_src.numel())
+    M = int(top_my.numel())
+    if E == 0 or M == 0:
+        return score
+
+    my_idx = top_my.repeat_interleave(E)
+    e_idx = torch.arange(E, dtype=torch.long, device=device).repeat(M)
+    source_slots = torch.stack([cand_src[my_idx, 0], e_src[e_idx]], dim=1)
+    target_slots = torch.stack([cand_tgt_slot[my_idx], e_tgt[e_idx]], dim=1)
+    ships = torch.stack([cand_send[my_idx, 0], e_send[e_idx]], dim=1)
+    eta = torch.stack([cand_eta[my_idx, 0], e_eta[e_idx]], dim=1)
+    owner = torch.stack([
+        torch.full((M * E,), int(pid), dtype=torch.long, device=device),
+        torch.full((M * E,), int(enemy_id), dtype=torch.long, device=device),
+    ], dim=1)
+    valid = torch.stack([
+        cand_active[my_idx, 0],
+        torch.ones(M * E, dtype=torch.bool, device=device),
+    ], dim=1)
+    launches = LaunchSet(
+        source_slots=source_slots,
+        target_slots=target_slots,
+        ships=ships,
+        eta=eta,
+        owner=owner,
+        valid=valid,
+    )
+    reply_score = score_candidates(
+        garrison_status, prod=prod, alive_by_step=alive_by_step,
+        player_count=int(player_count), launches=launches, player_id=pid,
+    ).reshape(M, E)
+    worst_reply = reply_score.min(dim=1).values
+    original = score[top_my]
+    downward = torch.minimum(torch.zeros_like(original), worst_reply - original)
+    adjusted = original + float(config.response_search_penalty_weight) * downward
+    out = score.clone()
+    out[top_my] = adjusted
+    return out
+
+
+def plan_lite_waves(
+    *,
+    movement: PlanetMovement,
+    obs,
+    obs_tensors: dict,
+    cache,
+    garrison_status,
+    prod: Tensor,
+    alive_by_step: Tensor,
+    config: ProducerLiteConfig,
+    player_count: int,
+):
+    P = obs.P
+    device = obs.device
+    dtype = obs.ships.dtype
+    pid = int(obs.player_id)
+
+    H_axis = int(garrison_status.ships.shape[-1])
+    H = max(H_axis - 1, 0)
+    K_eta = max(1, min(int(config.horizon), H))
+    W = max(1, int(config.max_waves_per_turn))
+    step = int(obs_tensors.get("step", torch.zeros(1, device=device)).reshape(-1)[0].item())
+
+    source_mask = obs.owned & obs.alive & (obs.ships >= float(config.min_ships_to_launch))
+    if not bool(source_mask.any()):
+        return _empty_entries(device, dtype)
+
+    S_cap = max(1, min(int(config.max_sources_per_lane), P))
+    source_idx, source_exists = _candidate_indices(obs.ships, source_mask, S_cap)
+    target_idx, target_exists = build_target_shortlist(
+        obs, obs_tensors, garrison_status, cache,
+        config=config, K_eta=K_eta, H=H, prod=prod, source_mask=source_mask,
+    )
+    if not bool(target_exists.any()):
+        return _empty_entries(device, dtype)
+    S = int(source_idx.shape[0])
+    T = int(target_idx.shape[0])
+    target_is_mine = obs.owned[target_idx.clamp(0, P - 1)]
+
+    source_ships = obs.ships[source_idx.clamp(0, P - 1)].to(dtype)
+    H_eff = torch.full((), float(H), dtype=dtype, device=device)
+    drain = safe_drain(
+        garrison_status, source_idx=source_idx, source_ships=source_ships,
+        H_eff=H_eff, player_id=pid,
+    )
+
+    eta_cap = torch.full((T,), float(K_eta), dtype=dtype, device=device)
+    floor = capture_floor(
+        garrison_status, target_idx=target_idx, k_max=K_eta,
+        capture_overhead=1.0, player_id=pid,
+    )
+
+    tier_parts = [
+        _tier_candidates(
+            movement=movement,
+            obs=obs,
+            cache=cache,
+            source_idx=source_idx,
+            source_exists=source_exists,
+            target_idx=target_idx,
+            target_exists=target_exists,
+            target_is_mine=target_is_mine,
+            drain=drain,
+            floor=floor,
+            eta_cap=eta_cap,
+            size_mult=float(mult),
+            S=S,
+            T=T,
+            H=H,
+            config=config,
+            pid=pid,
+            garrison_status=garrison_status,
+            prod=prod,
+            alive_by_step=alive_by_step,
+            player_count=player_count,
+            device=device,
+            dtype=dtype,
+        )
+        for mult in config.size_multipliers
+    ]
+
+    cand_src = torch.cat([p[0] for p in tier_parts], dim=0)
+    cand_send = torch.cat([p[1] for p in tier_parts], dim=0)
+    cand_angle = torch.cat([p[2] for p in tier_parts], dim=0)
+    cand_eta = torch.cat([p[3] for p in tier_parts], dim=0)
+    cand_active = torch.cat([p[4] for p in tier_parts], dim=0)
+    cand_tgt_slot = torch.cat([p[5] for p in tier_parts], dim=0)
+    cand_tgt_short = torch.cat([p[6] for p in tier_parts], dim=0)
+    cand_is_def = torch.cat([p[7] for p in tier_parts], dim=0)
+    score = torch.cat([p[8] for p in tier_parts], dim=0)
+    score = _apply_response_search(
+        movement=movement,
+        obs=obs,
+        cache=cache,
+        garrison_status=garrison_status,
+        prod=prod,
+        alive_by_step=alive_by_step,
+        config=config,
+        player_count=int(player_count),
+        step=int(step),
+        K_eta=int(K_eta),
+        H=int(H),
+        cand_src=cand_src,
+        cand_send=cand_send,
+        cand_angle=cand_angle,
+        cand_eta=cand_eta,
+        cand_active=cand_active,
+        cand_tgt_slot=cand_tgt_slot,
+        cand_is_def=cand_is_def,
+        score=score,
+        device=device,
+        dtype=dtype,
+    )
+
+    wave_entries, leftover = _greedy_select(
+        P=P, W=W, device=device, dtype=dtype, score=score,
+        cand_src=cand_src, cand_send=cand_send, cand_angle=cand_angle, cand_eta=cand_eta,
+        cand_active=cand_active, cand_tgt_slot=cand_tgt_slot, cand_tgt_short=cand_tgt_short,
+        cand_is_def=cand_is_def, source_budget=obs.ships.to(dtype).clone(),
+        target_exists=target_exists, roi_threshold=float(config.roi_threshold),
+    )
+
+    if not bool(config.enable_regroup):
+        return wave_entries
+    enemy_mass = cheap_enemy_pressure(obs, cache, horizon=float(K_eta), player_id=pid)
+    regroup_entries = _plan_regroup(
+        movement=movement, obs=obs, obs_tensors=obs_tensors, garrison_status=garrison_status,
+        leftover=leftover, original_ships=obs.ships.to(dtype), pressure=enemy_mass,
+        config=config, H=H,
+    )
+    return concat_launch_entries([wave_entries, regroup_entries])
+
+
+def run_turn(obs_tensors: dict, *, config: ProducerLiteConfig, player_count: int, memory) -> dict:
+    device = obs_tensors["planets"].device
+    obs = parse_obs(obs_tensors)
+    P = obs.P
+    if P == 0:
+        return empty_action_row(device)
+
+    movement = ensure_planet_movement(
+        obs_tensors=obs_tensors,
+        expected_cfg=_movement_config(config, player_count=int(player_count)),
+        cached_movement=getattr(memory, "movement", None),
+    )
+    memory.movement = movement
+    cache = build_distance_cache(movement, max_k=int(config.horizon))
+    H = int(config.horizon)
+    status = movement.garrison_status(max_horizon=H)
+    alive_by_step = movement.alive_by_step[: H + 1]
+
+    entries = plan_lite_waves(
+        movement=movement, obs=obs, obs_tensors=obs_tensors, cache=cache,
+        garrison_status=status, prod=movement.planet_prod,
+        alive_by_step=alive_by_step, config=config, player_count=int(player_count),
+    )
+    entries = disambiguate_duplicate_launches(entries)
+    launches = infer_planned_launches_from_entries(
+        obs_tensors=obs_tensors, movement=movement, entries=entries, player_id=int(obs.player_id),
+    )
+    apply_private_planned_launches(
+        movement=movement, launches=launches, owner_id=int(obs.player_id),
+        obs_tensors=obs_tensors,
+    )
+    planet_ids = obs_tensors["planets"][..., 0].long()
+    return entries_to_sparse_payload(entries, planet_ids=planet_ids)
+
+
+CONFIG_4P = dataclasses.replace(
+    ProducerLiteConfig(),
+    horizon=13,
+    max_sources_per_lane=6,
+    max_defensive_targets=2,
+    max_regroup_time=6.0,
+    max_regroup_targets_per_source=8,
+)
+
+
+def _config_for(player_count: int) -> ProducerLiteConfig:
+    return CONFIG_4P if int(player_count) >= 4 else ProducerLiteConfig()
+
+
+class ProducerLiteMemory:
+    def __init__(self) -> None:
+        self.movement = None
+        self.cached_player_count: int | None = None
+        self.last_sparse_action_row: dict | None = None
+
+    def reset(self) -> None:
+        self.movement = None
+        self.cached_player_count = None
+        self.last_sparse_action_row = None
+
+
+class ProducerLiteRuntime:
+    def __init__(self, memory: ProducerLiteMemory | None = None) -> None:
+        self.memory = memory if memory is not None else ProducerLiteMemory()
+
+    def reset(self) -> None:
+        self.memory.reset()
+
+    def tensor_action(self, obs_tensors: dict):
+        mem = self.memory
+        if bool((obs_tensors["step"] == 0).all()):
+            mem.cached_player_count = None
+        if mem.cached_player_count is None:
+            mem.cached_player_count = largest_initial_player_count(obs_tensors)
+        base = _config_for(mem.cached_player_count)
+        step = int(obs_tensors["step"].reshape(-1)[0].item())
+        config = _apply_phase_config(base, step)
+        row = run_turn(
+            obs_tensors, config=config,
+            player_count=int(mem.cached_player_count), memory=mem,
+        )
+        mem.last_sparse_action_row = row
+        return row
+
+
+_RUNTIME = ProducerLiteRuntime()
+
+
+def agent(obs):
+    player = obs.get("player", 0) if isinstance(obs, dict) else obs.player
+    player_id = int(player)
+    obs_tensors = single_obs_to_tensor(obs, player_id=player_id)
+    with torch.no_grad():
+        sparse_row = _RUNTIME.tensor_action(obs_tensors)
+    return sparse_action_row_to_moves(sparse_row, obs, player_id=player_id)

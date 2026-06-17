@@ -165,14 +165,20 @@ def run_game_with_make(
     crashed = primary_state.status != "DONE"
     placement = 1 + sum(score > primary_score for score in all_scores if score is not None)
 
+    # Kaggle's environment can award the first seat on exact score ties.
+    # For bot strength analysis, treat score_diff == 0 as a draw instead.
+    won = score_diff > 0
+    draw = score_diff == 0
+    lost = score_diff < 0
+
     return {
         "seed": seed,
         "player_index": player_index,
         "players": players,
         "reward": reward,
-        "won": reward == 1,
-        "draw": reward == 0,
-        "lost": reward == -1,
+        "won": won,
+        "draw": draw,
+        "lost": lost,
         "score_diff": score_diff,
         "primary_score": primary_score,
         "best_opponent_score": best_opponent_score,

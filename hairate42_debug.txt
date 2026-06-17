@@ -1,0 +1,12 @@
+agent_entry step=0 player=0 mode=stable
+shortlist_entry step=0 player=0
+step=0 player=0 anchor_active=False allowed=False top=[]
+agent_entry step=1 player=0 mode=stable
+shortlist_entry step=1 player=0
+step=1 player=0 anchor_active=False allowed=False top=[]
+agent_entry step=2 player=0 mode=stable
+shortlist_entry step=2 player=0
+step=2 player=0 anchor_active=False allowed=False top=[]
+agent_entry step=3 player=0 mode=stable
+shortlist_entry step=3 player=0
+step=3 player=0 anchor_active=False allowed=False top=[]
