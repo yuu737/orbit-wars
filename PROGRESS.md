@@ -1,6 +1,6 @@
 # Orbit Wars Progress
 
-Last updated: 2026-06-06
+Last updated: 2026-06-19
 
 ## Current Status
 
@@ -19,6 +19,15 @@ Last updated: 2026-06-06
 - [ ] Defense and reinforcement logic implemented
 - [ ] Endgame mode implemented
 - [x] Kaggle submission loop started
+- [x] Strong public baseline found around `1204`
+- [x] `sample7` / `sample8` behavior studied as strong components
+- [x] Initial board feature extraction built
+- [x] Initial board clustering built
+- [x] Loss-seed feature/HTML analysis built
+- [x] Single-package 4P `sample7`/`sample8` selector built
+- [x] Oracle dataset builder built
+- [ ] Oracle rules selected for `sample35`
+- [ ] Third 4P strategy implemented for board types where both `sample7` and `sample8` fail
 - [ ] Final two submissions selected
 
 ## Current Environment
@@ -29,22 +38,94 @@ Last updated: 2026-06-06
 
 ## Next Step
 
-Evaluate new bot candidates in both 2-player and 4-player setups, then build the next bot iteration with:
+Current priority is 4P improvement.
 
-- Better enemy attack and reinforcement decisions
-- Early defense of newly captured planets
-- Follow-up analysis from fresh replay losses in both formats
+Immediate next step:
 
-Keep using `evaluate.py` to measure each change.
+1. Build or resume the 4P oracle dataset.
+2. Inspect `oracle_summary.md` and `oracle_features.csv`.
+3. Convert only high-confidence `sample8`-winning board buckets into `sample35_singlefile_oracle_selector\oracle_rules.json`.
+4. Re-evaluate `sample35` across the fixed 4P seed blocks.
+
+Primary command:
+
+`C:\tmp\ow\Scripts\python.exe build_4p_oracle_dataset.py --blocks 2000000,5421622,56000000,9874600000,12000000 --games 10 --workers 5`
+
+If interrupted, collect/resume using the same `--out-dir`.
 
 ## Working Notes
 
 - High-level status lives in this file.
 - Change-by-change intent and evidence live in [EXPERIMENT_LOG.md](C:/Users/yuu98/Desktop/kaggle/orbit-wars/EXPERIMENT_LOG.md:1).
+- Recent handoff and current branch status live in [HANDOFF_RECENT.md](C:/Users/yuu98/Desktop/kaggle/orbit-wars/HANDOFF_RECENT.md:1).
+- Recent sample/hairate experiment notes live in [EXPERIMENT_LOG_RECENT.md](C:/Users/yuu98/Desktop/kaggle/orbit-wars/EXPERIMENT_LOG_RECENT.md:1).
 - `random` is now a sanity check, not a promotion gate.
 - Head-to-head against earlier snapshots is required before treating a change as stronger.
 
+## Current 4P Research Snapshot
+
+Safe public-ish baseline:
+
+- `sample7_4p_sample8_2p_submit_v3.zip`
+- Public score observed around `1204.1`
+
+Current 4P research candidates:
+
+- `sample32_singlefile_s7_s8_selector`
+  - Promising single-package selector.
+  - Uses sample8 `orbit_lite` and switches between `sample7`-style stable and `sample8`-style burst.
+- `sample34_singlefile_s7_s8_selector_tuned`
+  - Tightened selector; needs more evaluation.
+- `sample35_singlefile_oracle_selector`
+  - Reads optional `oracle_rules.json`.
+  - Current branch for oracle-rule experiments.
+
+Frozen:
+
+- `sample33_singlefile_contested_selector`
+  - Reserve-only contested mode did not improve `5421622`.
+
+Useful 4P blocks:
+
+- `2000000`
+- `5421622`
+- `56000000`
+- `9874600000`
+- `12000000`
+
+Current observed `sample32` local pool results:
+
+- `56000000`: `6W / 1D / 3L`
+- `12000000`: `4W / 6L`
+- `9874600000`: `5W / 5L`
+- `5421622`: `2W / 2D / 6L`
+- `2000000`: `6W / 4L`
+
+## Research Tools
+
+- `evaluate.py`
+  - Main local evaluator.
+- `dump_initial_boards.py`
+  - Produces raw initial boards, feature CSV, and HTML preview.
+- `cluster_initial_boards.py`
+  - Clusters many initial boards quickly.
+- `analyze_4p_losses.py`
+  - Parses evaluate logs and creates loss-focused features/HTML.
+- `build_4p_oracle_dataset.py`
+  - Runs or collects candidate evaluations across identical seeds.
+  - Safe to interrupt; completed logs can be reused with `--collect-only`.
+
 ## Latest Results
+
+Recent high-level results:
+
+- `sample7_4p_sample8_2p_submit_v3.zip` public score: about `1204.1`.
+- `sample7.zip` public score: about `1121.7`.
+- `sample8.zip` public score: about `1117.2`.
+- `sample32_singlefile_s7_s8_selector` preserves sample8 wins on `9874600005/9874600006`.
+- `sample33_singlefile_contested_selector` is frozen.
+
+Older early-development results:
 
 - Starter bot vs `random` over 20 games:
 - Win rate: `70%`
