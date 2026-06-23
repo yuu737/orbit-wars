@@ -1,0 +1,20 @@
+{
+  "candidate_id": "sample130_4p_threat_reserve_from110",
+  "parent": "sample110_4p_oneply_coord_from109",
+  "goal": "Reduce 4P early annihilation by reserving garrison on owned planets that face inbound enemy fleets, before offensive wave selection.",
+  "change": [
+    "New _threat_reserve_source_budget() in main.py.",
+    "Called in plan_lite_waves right after source_budget = obs.ships.clone().",
+    "Hard source-budget constraint (not a score bonus), threat-triggered and savable-gated.",
+    "Enabled in CONFIG_4P; propagates to all 4P modes. 2P unaffected (player_count<4 early return)."
+  ],
+  "config": {
+    "enable_threat_reserve_4p": true,
+    "threat_reserve_window": 6,
+    "threat_reserve_margin": 3.0,
+    "threat_reserve_prod_frac": 0.5,
+    "threat_reserve_start": 0,
+    "threat_reserve_limit": 200
+  },
+  "baseline_reference": "sample110 on the fixed 30-seed pool: 13W/17L, placement 1.60, diff -651.37, crash 0%."
+}

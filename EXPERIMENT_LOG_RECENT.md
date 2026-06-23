@@ -1,13 +1,49 @@
 # Recent Orbit Wars Experiment Log
 
-Updated: 2026-06-19
+Updated: 2026-06-23
 
 This file summarizes the recent `sample` / `hairate` experiments that were not
 covered by the older `EXPERIMENT_LOG.md`.
 
-## Current Best Submission Context
+## Current Development Baseline
 
-Public leaderboard references from recent submissions:
+Use `sample110_4p_oneply_coord_from109` as the main development baseline going forward.
+
+Reason:
+- 4P:
+  - `sample110` is currently the strongest known 4P line among our own code.
+  - It contains the true-one-ply / high-production coord-followup direction that actually moved win/loss results more than the earlier A/B/C selector-style changes.
+  - It should be treated as the reference behavior for future 4P work unless a new branch clearly beats it on fresh seed tests.
+- 2P:
+  - `sample8` itself is public-code based and remains very strong in the real/public environment.
+  - The 2P behavior inside `sample110` is also a strong practical baseline.
+  - Losses in 2P often come from same-family/public-code opponents that have small improvements over `sample8`, especially behavior changes around turn 50/100, plus genuinely high-level opponents.
+  - Do not replace the 2P baseline just because a small local public-code block looks bad; new 2P changes must avoid breaking the strong sample8/sample110 feel.
+- Submission-building caution:
+  - Avoid dynamic folder wrappers when possible. They repeatedly changed behavior through `orbit_lite` import/cache effects.
+  - Prefer one loaded package/root `main.py` with explicit 2P/4P branches.
+
+Current known weakness:
+- 4P still has a major top-player problem: even `sample110` can be erased around turn 40 before forming a stable base.
+- Future 4P improvements should prioritize surviving and stabilizing against top-tier early pressure, not only improving average score diff against public/local bots.
+
+## Competition Overview
+
+Orbit Wars is a Kaggle real-time strategy environment for 2 or 4 players.
+
+- Players start with one home planet and launch fleets to capture neutral or enemy planets.
+- The map is a 100x100 continuous 2D board with a destructive sun at the center.
+- Planets can be static or orbiting; orbiting planets require future-position prediction.
+- Owned planets produce ships each turn; higher-production planets are strategically critical.
+- Fleets travel in straight lines, can hit planets, leave the map, or be destroyed by crossing the sun.
+- The game lasts up to 500 turns. The winner is determined by total ships on planets plus ships in fleets at the end, or by elimination.
+- 2P and 4P are strategically different:
+  - 2P is closer to a direct duel where timing, counter-capture, and midgame response matter.
+  - 4P rewards avoiding wasteful non-leader fights, building a stable outer/side production base, and surviving early multi-player pressure.
+
+## Historical Submission Context
+
+Historical public leaderboard references from earlier submissions:
 
 - `sample7_4p_sample8_2p_submit_v3.zip`: `1204.1`
 - `sample7.zip`: `1121.7`
@@ -2160,3 +2196,131 @@ Current practical read:
   - `sample110_4p_oneply_coord_from109` is currently the strongest known 4P line among our code.
   - It improved somewhat over earlier versions, but it still has a structural weakness against top players: some games end around turn 40 with our position erased before a stable base forms.
   - Future 4P work should focus on avoiding early annihilation against top-tier pressure, not merely improving average diff or public-code matchups.
+
+## 2026-06-23 sample130: threat-aware source garrison reservation (early-defense)
+
+Date:
+- 2026-06-23
+
+Artifact:
+- `sample130_4p_threat_reserve_from110`
+
+Parent:
+- `sample110_4p_oneply_coord_from109`
+
+Motivation (diagnosis first):
+- selector_probe on the fixed 30-seed pool: `s7_stable=19, s8_burst=6, lane_anchor=4, winner_outer_domain=1`.
+  - The elaborate selector + specialized modes are mostly irrelevant on this benchmark; 63% of games are decided by the shared core engine (CONFIG_4P / s7_stable). So improvement must target the core producer, not the selector.
+- Failed precursor `sample129_4p_early_response_ramp_from110`:
+  - Only changed `orbit_response_ramp_end` 80->45 and `orbit_response_ramp_min` 0.35->0.55.
+  - 30-seed result was byte-identical to sample110 (`13W/17L`, diff `-651.37`).
+  - Conclusion: the orbit response gate does not engage in the early window (its `bonus - penalty` is ~0 there), so re-scheduling a score-bonus gate does nothing. Early defense must be a hard constraint, not a score term. sample129 not adopted.
+
+Implementation (single change, core engine):
+- New `_threat_reserve_source_budget()` in `main.py`.
+- Called in `plan_lite_waves` immediately after `source_budget = obs.ships.clone()`, before offensive/reserve greedy selection.
+- For each owned planet, compute inbound enemy ships over `threat_reserve_window` steps from `garrison_status.arrivals_by_owner` (enemy fleets already in flight), minus my own inbound reinforcement and a partial production buffer, plus a small margin. That is the garrison that must stay home.
+- HARD source-budget cut (offense physically cannot strip that planet), not a score bonus.
+- Threat-triggered: zero reserve when no enemy arrivals inbound (no passivity on quiet boards).
+- Savable-gated: zero reserve when even full garrison cannot hold (`reserve_need > ships`), so it never wastes ships on a doomed planet.
+- Enabled only in `CONFIG_4P` -> propagates to all 4P modes. 2P unaffected (`player_count < 4` early return; `CONFIG_2P` leaves it disabled by default).
+- Config: `enable_threat_reserve_4p=True, threat_reserve_window=6, threat_reserve_margin=3.0, threat_reserve_prod_frac=0.5, threat_reserve_start=0, threat_reserve_limit=200`.
+
+Sanity:
+- `py_compile`: pass.
+- Crash rate in the 30-seed run below: `0.0%`.
+- Behavior is genuinely changed (unlike sample129): 2-seed smoke diffs moved from sample110's `+1541 / -1221` to `+1215 / -1676`.
+
+Fixed 30-seed pool vs `sample7 + sample8 + hairate5`, seat0:
+- Seeds: `1657384936,1351844563,1351611807,53351919,457793527,1190946047,1890565501,1767874900,1625436819,1798067820,1182650381,786534061,560842328,1319582963,1438880892,1851779903,1209263198,1271979858,1458181989,200181723,638633100,1414997908,1771745689,1397683760,1297486259,157338764,1670733138,165725081,1714320719,651533336`
+- sample110 baseline:
+  - `13W/17L`, placement `1.60`, avg diff `-651.37`, crash `0%`.
+- sample130:
+  - `16W/14L`, placement `1.47`, avg diff `+46.00`, crash `0%`.
+  - Improves on every agreed metric (win count, placement, early survival, crash, diff).
+  - In the sample130 run no seed has `survival < 60` (minimum survival `83`), consistent with the early-annihilation target.
+
+Out-of-sample validation (random20, fresh seeds not in the 30-seed pool):
+- Seeds: `244160128,2009432271,942375866,2048305392,1561304223,1218863651,903821700,1798151692,694569277,1983603324,1317309966,3732104,1390562965,663003121,352320887,1399615834,479904572,1269357001,676735579,2018857515`
+- sample110 baseline:
+  - `6W/14L`, placement `1.70`, avg diff `-738.55`, crash `0%`.
+- sample130:
+  - `7W/13L`, placement `1.65`, avg diff `-540.65`, crash `0%`.
+- Per-seed: sample130 keeps ALL of sample110's 6 wins and additionally rescues seed `942375866` (`L -1049` -> `W +2043`). No win was lost.
+- Two independent seed sets now agree in direction (30-seed `+3W`, random20 `+1W`, both better placement and diff), so the gain generalizes and is not 30-seed overfit.
+
+Decision:
+- PROMOTED. `sample130_4p_threat_reserve_from110` is the new 4P development base, replacing `sample110_4p_oneply_coord_from109`.
+- It is a general mechanism-level improvement (a hard early-defense source constraint shared by all 4P modes), not a per-seed score bonus.
+- 2P is unchanged by this branch, so the strong sample8/sample110-style 2P baseline is preserved.
+
+Read / next:
+- The reserve is passive (keep ships home). The complementary active mechanism is still open: when `garrison_status.owner[p, 1:W]` predicts an owned high-prod/home planet will flip, inject a high-priority defensive reinforcement wave from the nearest safe neighbor before offense. Natural next branch on top of sample130.
+- Also try the same threat-reserve mechanism on the 2P path as a separate experiment (must not break the sample8/sample110 2P baseline; verify with the 2P gates).
+- Param note: margin=3.0 / window=6 were not tuned; any tuning should use a train/validate split, not the 30-seed pool alone.
+
+## 2026-06-23 sample131: active defensive reinforcement -- REJECTED
+
+Artifact: `sample131_4p_defense_reinforce_from130` (parent sample130).
+Idea: pre-offense pass that reinforces owned planets the no-action projection says will flip (garrison_status.owner flips within window, prod>=2), selecting existing defensive candidates before offense drains neighbours.
+Result (worse than sample130 on BOTH sets):
+- Fixed 30-seed: `15W/15L`, plc `1.50`, diff `-237.53` (sample130 `16W/14L`, plc `1.47`, diff `+46.00`).
+- random20: `5W/15L`, plc `1.75`, diff `-986.20` (sample130 `7W/13L`, plc `1.65`, diff `-540.65`).
+Read / lesson:
+- A 2-seed smoke looked great (rescued 53351919) but the full sets regressed: forcing defensive reinforcement before offense over-defends and goes passive, losing previously-won seeds (e.g. random20 942375866 W->L).
+- Confirms a general rule for this engine: **hard constraints that only PREVENT bad commitments help (sample130 reserve); mechanisms that FORCE actions or ADD score hurt (sample131 forced defense, plus historical broad bonuses / response-search).** Future defensive work should subtract options, not inject forced actions.
+- sample131 not adopted. sample130 remains the 4P base.
+
+## 2026-06-23 sample132/133/134 + early-death trace -- all NEUTRAL/NO-OP, root cause found
+
+Base remains `sample130`. Three further defensive variants on top of it, all on the fixed 30-seed + random20 (or in-session trace):
+- `sample132_4p_combat_aware_reserve_from130`: reserve threat = (top1_enemy - top2_enemy) instead of sum (enemies fight each other first). WASH: 30-seed `16W` plc `1.47` diff `+174` (better diff), random20 `7W` plc `1.65` diff `-595` (slightly worse). Same win count both sets. More-correct threat model; shelved, not adopted.
+- `sample133_4p_brawl_avoid_from130`: hard-forbid attacking an enemy planet a third-party enemy is already attacking. NEAR NO-OP: identical to sample130 on 3 of 4 diagnosed early-death seeds. Hypothesis (we feed contested enemies) was wrong. Rejected.
+- `sample134_4p_latent_reserve_from130`: add cheap_enemy_pressure (reachable enemy garrison mass) to the reserve threat to cover not-yet-launched pressure. NO-OP on the trace even at latent reach 14. Rejected.
+
+Root-cause trace (tools/trace_4p.py, per-turn planets/ships, seed 1399615834, sample130):
+- t<=32: all four players symmetric and even (3 planets each; we are actually AHEAD on ships, 112 vs 89).
+- t32->t40: WE voluntarily launch ~37 ships (112->75sh) and drop 3->1 planets, while two opponents cleanly expand 3->5 planets. By t52 we are eliminated.
+- Interpretation: the early death is NOT a defense/reserve failure (total ships stay flat while planets are lost). It is an OPENING EXPANSION / target-quality failure: our shared core (s7_stable, 63% of the 30-seed pool) over-commits launches that fail or get sniped, while the real sample7 expands cleanly and holds. Defensive reserves (sample130/132/134) and capture filters (sample133) cannot fix "we attack the wrong targets."
+- Consequence for next work: the high-value lever is opening offensive target selection / launch sizing quality (build a holdable cluster, avoid failed over-commit), which is deeper and higher-regression-risk (cf. sample131). It partly lives in orbit_lite (build_target_shortlist / score_candidates) which must not be broken. Recommend a careful, well-gated experiment here, validated on both seed sets, rather than more defensive micro-constraints (diminishing returns confirmed).
+
+Net status: `sample130_4p_threat_reserve_from110` is the confirmed improved 4P base (13->16W on 30-seed, 6->7W on random20, placement and diff up, crash 0%, 2P untouched). sample132 shelved (correct but neutral). sample131/133/134 rejected.
+
+## 2026-06-23 sample135: opening neutral focus (blanket no-enemy-attack) -- REJECTED, but decisive signal
+
+Artifact: `sample135_4p_opening_neutral_focus_from130`. Hard-forbid all enemy-target captures before turn 60 in 4P.
+Trace (seed 1399615834): collapse GONE -- held 3 planets at t40 (vs sample130 1 planet) and was alive 4p/227sh at t60 (vs dead t52).
+But full eval REGRESSED hard:
+- 30-seed: `5W/25L`, plc `1.83`, diff `-1402` (sample130 `16W`).
+- random20: `4W/16L`, plc `1.80`, diff `-1236` (sample130 `7W`).
+Decisive signal:
+- Removing enemy attacks costs ~11 wins. Enemy attacking is NET POSITIVE; only SOME enemy attacks (premature / un-holdable over-commit) are bad.
+- The blanket ban also threw away the winning vulture captures (taking weakened/cheap enemy planets), so we survived but never won.
+- Correct lever (confirmed by both the trace and this regression): distinguish GOOD enemy captures (holdable, weakened target = vulture) from BAD ones (un-holdable over-commit), and forbid only the bad ones -- i.e. a holdability / "can I hold it?" supply filter, not a time-based ban.
+- sample135 rejected. sample130 remains the base. Next: sample136 = holdability filter on enemy captures (allow vulture, forbid un-holdable), trace-validated before any heavy eval.
+
+## 2026-06-23 sample136: enemy-capture holdability filter -- REJECTED
+
+Artifact: `sample136_4p_enemy_holdability_from130`. Forbid only enemy captures whose target cannot be held (combat-aware net enemy arrivals in the post-capture window > surviving + reinforce + prod + margin).
+Targeted check (4 seeds): kept 1438880892 (W) but turned 165725081 from W->L (banned a capture that was part of sample130's winning line), and did NOT fix the 1399615834 death (survival still 48, same as sample130).
+Decisive read:
+- sample135 (ban ALL enemy attacks) fixed the 1399615834 death; sample136 (ban only un-holdable enemy captures) did not. So the t32-40 death is NOT target un-holdability -- the launches passed the holdability check. The real cause is SOURCE-STRIPPING: we empty our home to attack a (holdable) enemy, and a different enemy then takes the emptied home. The filter looks at the target, not the source.
+- sample130's reserve protects the source only against fleets already in flight, not against the latent nearby enemy garrison that launches after we empty the planet.
+- Conclusion confirmed across sample131-136 (six straight non-improvements): bolt-on tactical filters on top of an already-rich engine (true_one_ply / gates / reserve) are at/below a local optimum. The remaining gains require a STRUCTURAL change: a first-class supply analysis (Idea B) that scores the COST of weakening a source against all reachable enemy force, not just in-flight fleets.
+- sample136 rejected. sample130 remains the 4P base. Proceeding to Idea B (integrated supply analysis).
+
+## 2026-06-23 sample137: supply analysis / latent reachable-enemy reserve -- REJECTED; reserve direction EXHAUSTED
+
+Artifact: `sample137_4p_supply_reserve_from130`. Extend the source reserve with a latent reachable-enemy term (strongest single enemy planet that could launch and reach an owned planet within horizon, from cross_dist + fleet speed), combined with the in-flight term via MAX.
+Result (worse than sample130 on BOTH sets):
+- 30-seed: `12W/18L`, plc `1.63`, diff `-836` (sample130 `16W`, plc `1.47`, diff `+46`).
+- random20: `6W/14L`, plc `1.70`, diff `-733` (sample130 `7W`, plc `1.65`, diff `-541`).
+Read: latent reserve over-reserves -> passivity -> fewer wins (same failure mode as sample131/135). Trace on the symmetric brawl seed showed it held ships at t36 but still lost all planets by t44; that seed is a 4-way coinflip not worth tuning to.
+
+Summary of the whole 4P micro campaign (sample131-137, seven straight non-improvements over sample130):
+- WHAT WORKS: a precise, threat-triggered, savable-gated DEFENSIVE CONSTRAINT that only prevents over-draining (sample130). +3W/30-seed, +1W/random20, generalised.
+- WHAT FAILS: forcing actions (sample131 reinforce), banning options broadly (sample135 no-enemy-attack -> -11W), and any over-reservation (sample134/137 latent) -> passivity; and target-side holdability filters (sample133/136) miss the real cause and ban winning captures.
+- ROOT CAUSE of the residual early deaths (trace-confirmed): SOURCE-STRIPPING in symmetric 4-way brawls -- we empty a home to attack and a different enemy takes it. The engine is already near a local optimum for bolt-on tactics (true_one_ply / gates / safe_drain / reserve); single-function additions cannot beat it.
+- CONCLUSION: stop 4P bolt-on micro. The only remaining 4P upside is a STRUCTURAL rewrite (Idea A: replace the per-wave greedy `_greedy_select` with a global min-cost-flow / assignment allocation), which is a large, higher-risk, multi-step project (and must be hand-rolled in torch/numpy since scipy is not in the submission env). Alternatively, pivot to the untouched 2P axis (Ideas I/J) for fresher, lower-risk gains.
+
+CONFIRMED DELIVERABLE: `sample130_4p_threat_reserve_from110` is the validated improved 4P base (13->16W 30-seed, 6->7W random20, placement+diff up, crash 0%, 2P untouched, flat-submittable). sample131/133/134/135/136/137 rejected; sample132 shelved (neutral, more-correct threat model).

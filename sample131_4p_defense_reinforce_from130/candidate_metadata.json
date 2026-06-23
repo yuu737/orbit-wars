@@ -1,0 +1,25 @@
+{
+  "candidate_id": "sample131_4p_defense_reinforce_from130",
+  "parent": "sample130_4p_threat_reserve_from110",
+  "goal": "Actively reinforce owned planets the no-action projection says will flip, in a pre-offense pass, so a base about to be lost is saved before offense drains its neighbours. Complements (disjoint from) the sample130 threat reserve.",
+  "change": [
+    "New _defensive_reinforce_score() in main.py: masks the candidate score to reinforcement waves whose target is an owned, flip-predicted (garrison_status.owner flips within window), worth-saving (prod>=min) planet.",
+    "New pre-offense defensive greedy pass in plan_lite_waves between the reserve pass and the offensive wave pass, mirroring the existing reserve-pass pattern; decrements source_budget and removes defended targets from the offensive pass.",
+    "defense_entries added to both concat_launch_entries() returns.",
+    "Selects only EXISTING defensive candidates (does not fabricate score); gated to genuine projected losses, so no broad passivity.",
+    "Enabled in CONFIG_4P; propagates to all 4P modes. 2P unaffected (player_count<4 early return)."
+  ],
+  "config": {
+    "enable_defense_reinforce_4p": true,
+    "defense_reinforce_window": 5,
+    "defense_reinforce_max_waves": 3,
+    "defense_reinforce_min_prod": 2.0,
+    "defense_reinforce_roi": -0.5,
+    "defense_reinforce_start": 0,
+    "defense_reinforce_limit": 200
+  },
+  "baseline_reference": {
+    "fixed_30_seed": "sample130: 16W/14L, placement 1.47, diff +46.00, crash 0% (sample110: 13W/17L).",
+    "random20": "sample130: 7W/13L, placement 1.65, diff -540.65, crash 0% (sample110: 6W/14L)."
+  }
+}

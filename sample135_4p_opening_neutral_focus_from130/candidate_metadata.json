@@ -1,0 +1,16 @@
+{
+  "candidate_id": "sample135_4p_opening_neutral_focus_from130",
+  "parent": "sample130_4p_threat_reserve_from110",
+  "goal": "Fix the traced opening collapse: in 4P, hard-forbid offensive captures of enemy-owned planets before turn 60 so the opening builds a holdable neutral cluster instead of trading ships in failed early attacks.",
+  "change": [
+    "New _apply_opening_neutral_focus() in main.py: masks enemy-target offensive candidates to -inf while step < opening_no_enemy_turn (4P only).",
+    "Applied after the true_one_ply rescore, before source-budget/greedy. Neutral and reinforcement targets untouched.",
+    "Enabled in CONFIG_4P; all 4P modes. 2P unaffected."
+  ],
+  "config": {"enable_opening_neutral_focus_4p": true, "opening_no_enemy_turn": 60},
+  "trace_evidence": "seed 1399615834: sample130 collapses 3p->1p at t40 and dies t52; sample135 holds 3p at t40, is 4p/227sh at t60 (alive, competitive).",
+  "baseline_reference": {
+    "fixed_30_seed": "sample130: 16W/14L, placement 1.47, diff +46.00, crash 0%.",
+    "random20": "sample130: 7W/13L, placement 1.65, diff -540.65, crash 0%."
+  }
+}

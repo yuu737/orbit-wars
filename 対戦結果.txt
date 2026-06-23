@@ -1,0 +1,845 @@
+
+Copyright (C) Microsoft Corporation. All rights reserved.
+
+新機能と改善のために最新の PowerShell をインストールしてください!https://aka.ms/PSWindows
+
+PS C:\Users\yuu98> C:\tmp\ow\Scripts\python.exe evaluate.py --players 4 `
+>>   --agent sample105_4p_per_player_response_from104\main.py `
+>>   --opponent sample7\main.py `
+>>   --opponent sample8\main.py `
+>>   --opponent bots\hairate5.py `
+>>   --seed-list ($seedList -join ',') `
+>>   --workers 4 |
+>>   Select-String 'Wins|Losses|Draws|Crash rate|Average placement|Average score diff|seed='
+C:\tmp\ow\Scripts\python.exe: can't open file 'C:\\Users\\yuu98\\evaluate.py': [Errno 2] No such file or directory
+PS C:\Users\yuu98> @'
+>> import importlib.util
+>> import sys
+>> from kaggle_environments import make
+>>
+>> spec = importlib.util.spec_from_file_location(
+>>     "sample70",
+>>     r".\sample70_2p_s8_s7_heavy_selector\main.py",
+>> )
+>> mod = importlib.util.module_from_spec(spec)
+>> spec.loader.exec_module(mod)
+>>
+>> seeds = [1856394761, 1326896343, 1101726932]
+>>
+>> for seed in seeds:
+>>     env = make("orbit_wars", configuration={"seed": seed}, debug=False)
+>>     env.reset(2)
+>>     for seat in [0, 1]:
+>>         obs = env.steps[0][seat].observation
+>>         mode = mod._choose_2p_mode(obs)
+>>         print(f"seed={seed} seat={seat} mode={mode}")
+>> '@ | C:\tmp\ow\Scripts\python.exe -
+PS C:\Users\yuu98> @'
+>> import importlib.util
+>> import sys
+>> import io
+>> import contextlib
+>>
+>> buf_out = io.StringIO()
+>> buf_err = io.StringIO()
+>>
+>> with contextlib.redirect_stdout(buf_out), contextlib.redirect_stderr(buf_err):
+>>     from kaggle_environments import make
+>>
+>> spec = importlib.util.spec_from_file_location(
+>>     "sample69",
+>>     r".\sample69_4p_orbit_lite_response_gate\main.py",
+>> )
+>> mod = importlib.util.module_from_spec(spec)
+>> sys.modules["sample69"] = mod
+>> spec.loader.exec_module(mod)
+>>
+>> seeds = [2012339891,363175246,315400519,1796441431,754928456,754928456,915403528,915403528,927652245,1426214042, 306239195,2112295433,49433498,1488820789,1846002515, 1309011149]
+>>
+>> for seed in seeds:
+>>     with contextlib.redirect_stdout(buf_out), contextlib.redirect_stderr(buf_err):
+>>         env = make("orbit_wars", configuration={"seed": seed}, debug=False)
+>>         env.reset(4)
+>>     for seat in [0, 1, 2, 3]:
+>>         obs = env.steps[0][seat].observation
+>>         obs_tensors = mod.single_obs_to_tensor(obs, player_id=int(obs["player"]))
+>>         mode = mod._choose_4p_mode(obs_tensors)
+>>         print(f"seed={seed} seat={seat} mode={mode}")
+>> '@ | C:\tmp\ow\Scripts\python.exe
+PS C:\Users\yuu98> cd "C:\Users\yuu98\Desktop\kaggle\orbit-wars"
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> C:\tmp\ow\Scripts\python.exe evaluate.py --players 4 `
+>>   --agent sample105_4p_per_player_response_from104\main.py `
+>>   --opponent sample7\main.py `
+>>   --opponent sample8\main.py `
+>>   --opponent bots\hairate5.py `
+>>   --seed-list ($seedList -join ',') `
+>>   --workers 4 |
+>>   Select-String 'Wins|Losses|Draws|Crash rate|Average placement|Average score diff|seed='
+usage: evaluate.py [-h] [--agent AGENT] [--opponent OPPONENTS] [--games GAMES]
+                   [--seed-start SEED_START] [--seed-list SEED_LIST]
+                   [--players {2,4}] [--player-index PLAYER_INDEX]
+                   [--both-seats] [--workers WORKERS]
+evaluate.py: error: argument --seed-list: expected one argument
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> $seedList = 1..10 | ForEach-Object { Get-Random -Minimum 1 -Maximum 2147483647 }
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> Write-Host ($seedList -join ',')
+1129430366,1359411720,1121763242,1608872725,120542422,412771289,1891750302,2048874186,1405906997,666650506
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> C:\tmp\ow\Scripts\python.exe evaluate.py --players 4 `
+>>   --agent sample105_4p_per_player_response_from104\main.py `
+>>   --opponent sample7\main.py `
+>>   --opponent sample8\main.py `
+>>   --opponent bots\hairate5.py `
+>>   --seed-list ($seedList -join ',') `
+>>   --workers 4 |
+>>   Select-String 'Wins|Losses|Draws|Crash rate|Average placement|Average score diff|seed='
+
+Wins: 4 (40.0%)
+Draws: 0 (0.0%)
+Losses: 6 (60.0%)
+Crash rate: 0.0%
+Average score diff: -337.30
+Average placement: 1.60
+  seed=1129430366 seat=0 place=2 reward=-1 score=0    best_opp=1931 diff=-1931 length=217 survival=114 status=DONE
+  seed=1359411720 seat=0 place=2 reward=-1 score=0    best_opp=2714 diff=-2714 length=197 survival=103 status=DONE
+  seed=1121763242 seat=0 place=1 reward=1  score=2324 best_opp=0    diff=2324  length=215 survival=215 status=DONE
+  seed=1608872725 seat=0 place=1 reward=1  score=2559 best_opp=0    diff=2559  length=272 survival=272 status=DONE
+  seed=120542422 seat=0 place=2 reward=-1 score=0    best_opp=2104 diff=-2104 length=170 survival=169 status=DONE
+  seed=412771289 seat=0 place=1 reward=1  score=2242 best_opp=0    diff=2242  length=146 survival=146 status=DONE
+  seed=1891750302 seat=0 place=1 reward=1  score=2486 best_opp=0    diff=2486  length=195 survival=195 status=DONE
+  seed=2048874186 seat=0 place=2 reward=-1 score=0    best_opp=2495 diff=-2495 length=170 survival=114 status=DONE
+  seed=1405906997 seat=0 place=2 reward=-1 score=0    best_opp=2083 diff=-2083 length=218 survival=176 status=DONE
+  seed=666650506 seat=0 place=2 reward=-1 score=0    best_opp=1657 diff=-1657 length=186 survival=154 status=DONE
+
+
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars>
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars>
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars>
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> C:\tmp\ow\Scripts\python.exe evaluate.py --players 4 `
+>>   --agent sample104_4p_mini_rollout_from99\main.py `
+>>   --opponent sample7\main.py `
+>>   --opponent sample8\main.py `
+>>   --opponent bots\hairate5.py `
+>>   --seed-list ($seedList -join ',') `
+>>   --workers 4 |
+>>   Select-String 'Wins|Losses|Draws|Crash rate|Average placement|Average score diff|seed='
+
+Wins: 4 (40.0%)
+Draws: 0 (0.0%)
+Losses: 6 (60.0%)
+Crash rate: 0.0%
+Average score diff: -301.80
+Average placement: 1.60
+  seed=1129430366 seat=0 place=2 reward=-1 score=0    best_opp=1931 diff=-1931 length=217 survival=114 status=DONE
+  seed=1359411720 seat=0 place=2 reward=-1 score=0    best_opp=2714 diff=-2714 length=197 survival=103 status=DONE
+  seed=1121763242 seat=0 place=1 reward=1  score=2553 best_opp=0    diff=2553  length=165 survival=165 status=DONE
+  seed=1608872725 seat=0 place=1 reward=1  score=2559 best_opp=0    diff=2559  length=272 survival=272 status=DONE
+  seed=120542422 seat=0 place=2 reward=-1 score=0    best_opp=2104 diff=-2104 length=170 survival=169 status=DONE
+  seed=412771289 seat=0 place=1 reward=1  score=2368 best_opp=0    diff=2368  length=156 survival=156 status=DONE
+  seed=1891750302 seat=0 place=1 reward=1  score=2486 best_opp=0    diff=2486  length=195 survival=195 status=DONE
+  seed=2048874186 seat=0 place=2 reward=-1 score=0    best_opp=2495 diff=-2495 length=170 survival=114 status=DONE
+  seed=1405906997 seat=0 place=2 reward=-1 score=0    best_opp=2083 diff=-2083 length=218 survival=176 status=DONE
+  seed=666650506 seat=0 place=2 reward=-1 score=0    best_opp=1657 diff=-1657 length=186 survival=154 status=DONE
+
+
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> New-Item -ItemType Directory -Force .\research_runs | Out-Null
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> New-Item -ItemType Directory -Force .\research_runs | Out-Null; $seedList = 1..40 | ForEach-Object { Get-Random -Minimum 1 -Maximum 2147483647 }; $seedCsv = $seedList -join ','; Write-Host "=== random40 seeds ==="; Write-Host $seedCsv; Write-Host "=== sample104 random40 ==="; C:\tmp\ow\Scripts\python.exe evaluate.py --players 4 --agent sample104_4p_mini_rollout_from99\main.py --opponent sample7\main.py --opponent sample8\main.py --opponent bots\hairate5.py --seed-list $seedCsv --workers 4 | Tee-Object .\research_runs\sample104_vs_105_random40_sample104.txt | Select-String 'Wins|Losses|Draws|Crash rate|Average placement|Average score diff|seed='; Write-Host "=== sample105 random40 ==="; C:\tmp\ow\Scripts\python.exe evaluate.py --players 4 --agent sample105_4p_per_player_response_from104\main.py --opponent sample7\main.py --opponent sample8\main.py --opponent bots\hairate5.py --seed-list $seedCsv --workers 4 | Tee-Object .\research_runs\sample104_vs_105_random40_sample105.txt | Select-String 'Wins|Losses|Draws|Crash rate|Average placement|Average score diff|seed='; Write-Host "=== sample104 selector/features ==="; C:\tmp\ow\Scripts\python.exe tools\selector_probe_4p.py --agent sample104_4p_mini_rollout_from99\main.py --seed-list $seedCsv --csv --quiet-env-noise > .\research_runs\sample104_random40_features.csv; Write-Host "=== sample105 selector/features ==="; C:\tmp\ow\Scripts\python.exe tools\selector_probe_4p.py --agent sample105_4p_per_player_response_from104\main.py --seed-list $seedCsv --csv --quiet-env-noise > .\research_runs\sample105_random40_features.csv; Write-Host "=== DONE random40 comparison ==="
+
+=== random40 seeds ===
+1561981100,273810790,1381690448,455017168,328252692,1359606915,207805752,1521010012,2061381741,2031588374,745728204,1321150306,1444777672,1846578819,1744711963,620592693,600935109,414548470,27828399,1708001866,1266582616,526132105,330315880,612298038,1218819971,115817581,867388374,1896738840,542332947,290608494,91052759,1051762573,1242042765,1121868078,2117452436,1688477157,231581648,1737176116,216684696,115486261
+=== sample104 random40 ===
+
+Wins: 17 (42.5%)
+Draws: 3 (7.5%)
+Losses: 20 (50.0%)
+Crash rate: 0.0%
+Average score diff: 542.35
+Average placement: 1.50
+  seed=1561981100 seat=0 place=1 reward=1  score=1646 best_opp=0    diff=1646  length=143 survival=143 status=DONE
+  seed=273810790 seat=0 place=2 reward=-1 score=0    best_opp=1273 diff=-1273 length=216 survival=181 status=DONE
+  seed=1381690448 seat=0 place=2 reward=-1 score=0    best_opp=2389 diff=-2389 length=232 survival=193 status=DONE
+  seed=455017168 seat=0 place=1 reward=1  score=1840 best_opp=0    diff=1840  length=203 survival=203 status=DONE
+  seed=328252692 seat=0 place=1 reward=1  score=1759 best_opp=0    diff=1759  length=101 survival=101 status=DONE
+  seed=1359606915 seat=0 place=2 reward=-1 score=0    best_opp=3042 diff=-3042 length=137 survival=53  status=DONE
+  seed=207805752 seat=0 place=1 reward=1  score=21744 best_opp=722  diff=21022 length=499 survival=499 status=DONE
+  seed=1521010012 seat=0 place=2 reward=-1 score=0    best_opp=2593 diff=-2593 length=209 survival=119 status=DONE
+  seed=2061381741 seat=0 place=2 reward=-1 score=0    best_opp=1944 diff=-1944 length=195 survival=109 status=DONE
+  seed=2031588374 seat=0 place=1 reward=1  score=1785 best_opp=0    diff=1785  length=239 survival=239 status=DONE
+  seed=745728204 seat=0 place=2 reward=-1 score=0    best_opp=1129 diff=-1129 length=180 survival=142 status=DONE
+  seed=1321150306 seat=0 place=2 reward=-1 score=0    best_opp=1985 diff=-1985 length=107 survival=103 status=DONE
+  seed=1444777672 seat=0 place=1 reward=1  score=1630 best_opp=0    diff=1630  length=123 survival=123 status=DONE
+  seed=1846578819 seat=0 place=1 reward=1  score=2398 best_opp=0    diff=2398  length=221 survival=221 status=DONE
+  seed=1744711963 seat=0 place=1 reward=1  score=432  best_opp=0    diff=432   length=108 survival=108 status=DONE
+  seed=620592693 seat=0 place=2 reward=-1 score=0    best_opp=1896 diff=-1896 length=144 survival=143 status=DONE
+  seed=600935109 seat=0 place=2 reward=-1 score=0    best_opp=1339 diff=-1339 length=142 survival=92  status=DONE
+  seed=414548470 seat=0 place=1 reward=1  score=640  best_opp=0    diff=640   length=126 survival=126 status=DONE
+  seed=27828399 seat=0 place=1 reward=1  score=2996 best_opp=0    diff=2996  length=213 survival=213 status=DONE
+  seed=1708001866 seat=0 place=1 reward=1  score=1157 best_opp=0    diff=1157  length=134 survival=134 status=DONE
+  seed=1266582616 seat=0 place=2 reward=-1 score=0    best_opp=2320 diff=-2320 length=134 survival=90  status=DONE
+  seed=526132105 seat=0 place=1 reward=1  score=660  best_opp=0    diff=660   length=194 survival=194 status=DONE
+  seed=330315880 seat=0 place=1 reward=1  score=15784 best_opp=525  diff=15259 length=499 survival=499 status=DONE
+  seed=612298038 seat=0 place=2 reward=-1 score=0    best_opp=2841 diff=-2841 length=124 survival=123 status=DONE
+  seed=1218819971 seat=0 place=1 reward=1  score=1736 best_opp=0    diff=1736  length=146 survival=146 status=DONE
+  seed=115817581 seat=0 place=1 reward=1  score=1507 best_opp=1507 diff=0     length=499 survival=499 status=DONE
+  seed=867388374 seat=0 place=1 reward=1  score=3954 best_opp=3954 diff=0     length=499 survival=499 status=DONE
+  seed=1896738840 seat=0 place=2 reward=-1 score=0    best_opp=4469 diff=-4469 length=284 survival=110 status=DONE
+  seed=542332947 seat=0 place=2 reward=-1 score=0    best_opp=2871 diff=-2871 length=141 survival=140 status=DONE
+  seed=290608494 seat=0 place=1 reward=1  score=1781 best_opp=0    diff=1781  length=164 survival=164 status=DONE
+  seed=91052759 seat=0 place=2 reward=-1 score=0    best_opp=1585 diff=-1585 length=176 survival=100 status=DONE
+  seed=1051762573 seat=0 place=2 reward=-1 score=0    best_opp=1130 diff=-1130 length=167 survival=71  status=DONE
+  seed=1242042765 seat=0 place=2 reward=-1 score=0    best_opp=1072 diff=-1072 length=166 survival=135 status=DONE
+  seed=1121868078 seat=0 place=1 reward=1  score=1504 best_opp=0    diff=1504  length=214 survival=214 status=DONE
+  seed=2117452436 seat=0 place=2 reward=-1 score=0    best_opp=1980 diff=-1980 length=225 survival=184 status=DONE
+  seed=1688477157 seat=0 place=1 reward=1  score=2985 best_opp=2985 diff=0     length=499 survival=499 status=DONE
+  seed=231581648 seat=0 place=1 reward=1  score=3658 best_opp=0    diff=3658  length=286 survival=286 status=DONE
+  seed=1737176116 seat=0 place=2 reward=-1 score=0    best_opp=1496 diff=-1496 length=117 survival=110 status=DONE
+  seed=216684696 seat=0 place=2 reward=-1 score=0    best_opp=1664 diff=-1664 length=129 survival=110 status=DONE
+  seed=115486261 seat=0 place=2 reward=-1 score=0    best_opp=1191 diff=-1191 length=131 survival=94  status=DONE
+=== sample105 random40 ===
+Wins: 17 (42.5%)
+Draws: 3 (7.5%)
+Losses: 20 (50.0%)
+Crash rate: 0.0%
+Average score diff: 543.02
+Average placement: 1.50
+  seed=1561981100 seat=0 place=1 reward=1  score=1646 best_opp=0    diff=1646  length=143 survival=143 status=DONE
+  seed=273810790 seat=0 place=2 reward=-1 score=0    best_opp=1273 diff=-1273 length=216 survival=181 status=DONE
+  seed=1381690448 seat=0 place=2 reward=-1 score=0    best_opp=2389 diff=-2389 length=232 survival=193 status=DONE
+  seed=455017168 seat=0 place=1 reward=1  score=1840 best_opp=0    diff=1840  length=203 survival=203 status=DONE
+  seed=328252692 seat=0 place=1 reward=1  score=1759 best_opp=0    diff=1759  length=101 survival=101 status=DONE
+  seed=1359606915 seat=0 place=2 reward=-1 score=0    best_opp=3042 diff=-3042 length=137 survival=53  status=DONE
+  seed=207805752 seat=0 place=1 reward=1  score=21744 best_opp=722  diff=21022 length=499 survival=499 status=DONE
+  seed=1521010012 seat=0 place=2 reward=-1 score=0    best_opp=2593 diff=-2593 length=209 survival=119 status=DONE
+  seed=2061381741 seat=0 place=2 reward=-1 score=0    best_opp=1944 diff=-1944 length=195 survival=109 status=DONE
+  seed=2031588374 seat=0 place=1 reward=1  score=1785 best_opp=0    diff=1785  length=239 survival=239 status=DONE
+  seed=745728204 seat=0 place=2 reward=-1 score=0    best_opp=1129 diff=-1129 length=180 survival=142 status=DONE
+  seed=1321150306 seat=0 place=2 reward=-1 score=0    best_opp=2068 diff=-2068 length=108 survival=107 status=DONE
+  seed=1444777672 seat=0 place=1 reward=1  score=1630 best_opp=0    diff=1630  length=123 survival=123 status=DONE
+  seed=1846578819 seat=0 place=1 reward=1  score=2398 best_opp=0    diff=2398  length=221 survival=221 status=DONE
+  seed=1744711963 seat=0 place=1 reward=1  score=548  best_opp=0    diff=548   length=111 survival=111 status=DONE
+  seed=620592693 seat=0 place=2 reward=-1 score=0    best_opp=1896 diff=-1896 length=144 survival=143 status=DONE
+  seed=600935109 seat=0 place=2 reward=-1 score=0    best_opp=1339 diff=-1339 length=142 survival=92  status=DONE
+  seed=414548470 seat=0 place=1 reward=1  score=640  best_opp=0    diff=640   length=126 survival=126 status=DONE
+  seed=27828399 seat=0 place=1 reward=1  score=2996 best_opp=0    diff=2996  length=213 survival=213 status=DONE
+  seed=1708001866 seat=0 place=1 reward=1  score=1157 best_opp=0    diff=1157  length=134 survival=134 status=DONE
+  seed=1266582616 seat=0 place=2 reward=-1 score=0    best_opp=2480 diff=-2480 length=133 survival=89  status=DONE
+  seed=526132105 seat=0 place=1 reward=1  score=660  best_opp=0    diff=660   length=194 survival=194 status=DONE
+  seed=330315880 seat=0 place=1 reward=1  score=15784 best_opp=525  diff=15259 length=499 survival=499 status=DONE
+  seed=612298038 seat=0 place=2 reward=-1 score=0    best_opp=2687 diff=-2687 length=159 survival=158 status=DONE
+  seed=1218819971 seat=0 place=1 reward=1  score=1736 best_opp=0    diff=1736  length=146 survival=146 status=DONE
+  seed=115817581 seat=0 place=1 reward=1  score=1507 best_opp=1507 diff=0     length=499 survival=499 status=DONE
+  seed=867388374 seat=0 place=1 reward=1  score=3954 best_opp=3954 diff=0     length=499 survival=499 status=DONE
+  seed=1896738840 seat=0 place=2 reward=-1 score=0    best_opp=4469 diff=-4469 length=284 survival=110 status=DONE
+  seed=542332947 seat=0 place=2 reward=-1 score=0    best_opp=2871 diff=-2871 length=141 survival=140 status=DONE
+  seed=290608494 seat=0 place=1 reward=1  score=1781 best_opp=0    diff=1781  length=164 survival=164 status=DONE
+  seed=91052759 seat=0 place=2 reward=-1 score=0    best_opp=1585 diff=-1585 length=176 survival=100 status=DONE
+  seed=1051762573 seat=0 place=2 reward=-1 score=0    best_opp=1130 diff=-1130 length=167 survival=71  status=DONE
+  seed=1242042765 seat=0 place=2 reward=-1 score=0    best_opp=1072 diff=-1072 length=166 survival=135 status=DONE
+  seed=1121868078 seat=0 place=1 reward=1  score=1504 best_opp=0    diff=1504  length=214 survival=214 status=DONE
+  seed=2117452436 seat=0 place=2 reward=-1 score=0    best_opp=1980 diff=-1980 length=225 survival=184 status=DONE
+  seed=1688477157 seat=0 place=1 reward=1  score=2985 best_opp=2985 diff=0     length=499 survival=499 status=DONE
+  seed=231581648 seat=0 place=1 reward=1  score=3658 best_opp=0    diff=3658  length=286 survival=286 status=DONE
+  seed=1737176116 seat=0 place=2 reward=-1 score=0    best_opp=1496 diff=-1496 length=117 survival=110 status=DONE
+  seed=216684696 seat=0 place=2 reward=-1 score=0    best_opp=1664 diff=-1664 length=129 survival=110 status=DONE
+  seed=115486261 seat=0 place=2 reward=-1 score=0    best_opp=1191 diff=-1191 length=131 survival=94  status=DONE
+=== sample104 selector/features ===
+=== sample105 selector/features ===
+=== DONE random40 comparison ===
+
+
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> $seedList = 1..20 | ForEach-Object { Get-Random -Minimum 1 -Maximum 2147483647 }
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> $seedCsv = $seedList -join ','
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars>
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> Write-Host "=== seeds ==="
+=== seeds ===
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> Write-Host $seedCsv
+98834007,1522561038,460985805,1543026641,719921714,808936432,1193654019,1207918184,1661603053,595398685,267117348,1375371788,203644404,459407471,1407436312,460368473,734500522,1616261939,1680314452,860430514
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars>
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> Write-Host "=== sample104 ==="
+=== sample104 ===
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> C:\tmp\ow\Scripts\python.exe evaluate.py --players 4 --agent sample104_4p_mini_rollout_from99\main.py --opponent sample7\main.py --opponent sample8\main.py --opponent bots\hairate5.py --seed-list $seedCsv --workers 4 | Select-String 'Wins|Losses|Draws|Crash rate|Average placement|Average score diff|seed='
+
+Wins: 5 (25.0%)
+Draws: 0 (0.0%)
+Losses: 15 (75.0%)
+Crash rate: 0.0%
+Average score diff: -1670.15
+Average placement: 1.80
+  seed=98834007 seat=0 place=2 reward=-1 score=0    best_opp=2106 diff=-2106 length=147 survival=146 status=DONE
+  seed=1522561038 seat=0 place=2 reward=-1 score=238  best_opp=10779 diff=-10541 length=499 survival=499 status=DONE
+  seed=460985805 seat=0 place=1 reward=1  score=2155 best_opp=0    diff=2155  length=191 survival=191 status=DONE
+  seed=1543026641 seat=0 place=2 reward=-1 score=0    best_opp=1449 diff=-1449 length=214 survival=103 status=DONE
+  seed=719921714 seat=0 place=2 reward=-1 score=0    best_opp=1873 diff=-1873 length=233 survival=79  status=DONE
+  seed=808936432 seat=0 place=1 reward=1  score=1368 best_opp=0    diff=1368  length=142 survival=142 status=DONE
+  seed=1193654019 seat=0 place=1 reward=1  score=2113 best_opp=0    diff=2113  length=103 survival=103 status=DONE
+  seed=1207918184 seat=0 place=2 reward=-1 score=0    best_opp=2628 diff=-2628 length=210 survival=103 status=DONE
+  seed=1661603053 seat=0 place=1 reward=1  score=2136 best_opp=0    diff=2136  length=133 survival=133 status=DONE
+  seed=595398685 seat=0 place=2 reward=-1 score=0    best_opp=1114 diff=-1114 length=219 survival=136 status=DONE
+  seed=267117348 seat=0 place=2 reward=-1 score=0    best_opp=1269 diff=-1269 length=175 survival=71  status=DONE
+  seed=1375371788 seat=0 place=2 reward=-1 score=0    best_opp=1887 diff=-1887 length=141 survival=97  status=DONE
+  seed=203644404 seat=0 place=2 reward=-1 score=0    best_opp=2941 diff=-2941 length=195 survival=138 status=DONE
+  seed=459407471 seat=0 place=2 reward=-1 score=0    best_opp=2446 diff=-2446 length=152 survival=131 status=DONE
+  seed=1407436312 seat=0 place=1 reward=1  score=1460 best_opp=0    diff=1460  length=90  survival=90  status=DONE
+  seed=460368473 seat=0 place=2 reward=-1 score=0    best_opp=1726 diff=-1726 length=86  survival=68  status=DONE
+  seed=734500522 seat=0 place=3 reward=-1 score=0    best_opp=6747 diff=-6747 length=499 survival=147 status=DONE
+  seed=1616261939 seat=0 place=2 reward=-1 score=0    best_opp=2064 diff=-2064 length=176 survival=129 status=DONE
+  seed=1680314452 seat=0 place=2 reward=-1 score=0    best_opp=2336 diff=-2336 length=160 survival=96  status=DONE
+  seed=860430514 seat=0 place=2 reward=-1 score=0    best_opp=1508 diff=-1508 length=139 survival=138 status=DONE
+
+
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars>
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> Write-Host "=== sample108 ==="
+=== sample108 ===
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> C:\tmp\ow\Scripts\python.exe evaluate.py --players 4 --agent sample108_4p_oneply_filter_from104\main.py --opponent sample7\main.py --opponent sample8\main.py --opponent bots\hairate5.py --seed-list $seedCsv --workers 4 | Select-String 'Wins|Losses|Draws|Crash rate|Average placement|Average score diff|seed='
+
+Wins: 5 (25.0%)
+Draws: 0 (0.0%)
+Losses: 15 (75.0%)
+Crash rate: 0.0%
+Average score diff: -1644.90
+Average placement: 1.75
+  seed=98834007 seat=0 place=2 reward=-1 score=0    best_opp=2106 diff=-2106 length=147 survival=146 status=DONE
+  seed=1522561038 seat=0 place=2 reward=-1 score=442  best_opp=11743 diff=-11301 length=499 survival=499 status=DONE
+  seed=460985805 seat=0 place=1 reward=1  score=3102 best_opp=0    diff=3102  length=196 survival=196 status=DONE
+  seed=1543026641 seat=0 place=2 reward=-1 score=0    best_opp=1449 diff=-1449 length=214 survival=103 status=DONE
+  seed=719921714 seat=0 place=2 reward=-1 score=0    best_opp=1873 diff=-1873 length=233 survival=79  status=DONE
+  seed=808936432 seat=0 place=1 reward=1  score=2248 best_opp=0    diff=2248  length=180 survival=180 status=DONE
+  seed=1193654019 seat=0 place=1 reward=1  score=2167 best_opp=0    diff=2167  length=105 survival=105 status=DONE
+  seed=1207918184 seat=0 place=2 reward=-1 score=0    best_opp=2634 diff=-2634 length=210 survival=103 status=DONE
+  seed=1661603053 seat=0 place=2 reward=-1 score=0    best_opp=2802 diff=-2802 length=168 survival=133 status=DONE
+  seed=595398685 seat=0 place=2 reward=-1 score=0    best_opp=1114 diff=-1114 length=219 survival=136 status=DONE
+  seed=267117348 seat=0 place=2 reward=-1 score=0    best_opp=1269 diff=-1269 length=175 survival=71  status=DONE
+  seed=1375371788 seat=0 place=2 reward=-1 score=0    best_opp=1887 diff=-1887 length=141 survival=97  status=DONE
+  seed=203644404 seat=0 place=2 reward=-1 score=0    best_opp=1908 diff=-1908 length=166 survival=124 status=DONE
+  seed=459407471 seat=0 place=2 reward=-1 score=0    best_opp=2629 diff=-2629 length=145 survival=94  status=DONE
+  seed=1407436312 seat=0 place=1 reward=1  score=1460 best_opp=0    diff=1460  length=90  survival=90  status=DONE
+  seed=460368473 seat=0 place=2 reward=-1 score=0    best_opp=1726 diff=-1726 length=86  survival=68  status=DONE
+  seed=734500522 seat=0 place=2 reward=-1 score=108  best_opp=8765 diff=-8657 length=499 survival=499 status=DONE
+  seed=1616261939 seat=0 place=1 reward=1  score=2810 best_opp=0    diff=2810  length=137 survival=137 status=DONE
+  seed=1680314452 seat=0 place=2 reward=-1 score=0    best_opp=2336 diff=-2336 length=160 survival=96  status=DONE
+  seed=860430514 seat=0 place=2 reward=-1 score=0    best_opp=994  diff=-994  length=118 survival=117 status=DONE
+
+
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars>
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars>
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> $flip = '98834007,1522561038,460985805,1543026641,719921714,808936432,1193654019,1207918184,1661603053,595398685,267117348,1375371788,203644404,459407471,1407436312,460368473,734500522,1616261939,1680314452,860430514'
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars>
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> Write-Host "=== sample104 submit candidate ==="
+=== sample104 submit candidate ===
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> C:\tmp\ow\Scripts\python.exe tools\diagnose_4p.py `
+>>   --agent sample104_4p_mini_rollout_from99\main.py `
+>>   --opponent sample7\main.py `
+>>   --opponent sample8\main.py `
+>>   --opponent bots\hairate5.py `
+>>   --seed-list $flip `
+>>   --show-features `
+>>   --quiet-env-noise
+seed=98834007 result=L place=2 diff=-2106 mode=lane_anchor length=147 survival=146
+  standings: 1:sample8(seat2,score=2106) | 2:sample104_4p_mini_rollout_from99(seat0,score=0) | 3:sample7(seat1,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=68.8 n25_prod=10.0 n45_prod=28.0 n45_cheap=4.0 n65_high_prod=8.0 chain_score=64.1 outer_anchor_score=80.9 support_density=22.0 enemy_cluster_risk=128.9
+seed=1522561038 result=L place=2 diff=-10541 mode=s7_stable length=499 survival=499
+  standings: 1:sample7(seat1,score=10779) | 2:sample104_4p_mini_rollout_from99(seat0,score=238) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=50.3 n25_prod=11.0 n45_prod=21.0 n45_cheap=6.0 n65_high_prod=5.0 chain_score=33.2 outer_anchor_score=52.3 support_density=18.0 enemy_cluster_risk=97.1
+seed=460985805 result=W place=1 diff=2155 mode=s7_stable length=191 survival=191
+  standings: 1:sample104_4p_mini_rollout_from99(seat0,score=2155) | 2:sample7(seat1,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=84.4 n25_prod=8.0 n45_prod=18.0 n45_cheap=2.0 n65_high_prod=5.0 chain_score=54.5 outer_anchor_score=83.5 support_density=32.5 enemy_cluster_risk=65.1
+seed=1543026641 result=L place=2 diff=-1449 mode=s7_stable length=214 survival=103
+  standings: 1:sample7(seat1,score=1449) | 2:sample104_4p_mini_rollout_from99(seat0,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=68.4 n25_prod=2.0 n45_prod=16.0 n45_cheap=8.0 n65_high_prod=2.0 chain_score=28.5 outer_anchor_score=37.7 support_density=7.5 enemy_cluster_risk=72.2
+seed=719921714 result=L place=2 diff=-1873 mode=s7_stable length=233 survival=79
+  standings: 1:sample8(seat2,score=1873) | 2:sample104_4p_mini_rollout_from99(seat0,score=0) | 3:sample7(seat1,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=53.1 n25_prod=18.0 n45_prod=33.0 n45_cheap=6.0 n65_high_prod=11.0 chain_score=58.8 outer_anchor_score=94.6 support_density=37.0 enemy_cluster_risk=154.6
+seed=808936432 result=W place=1 diff=1368 mode=s8_burst length=142 survival=142
+  standings: 1:sample104_4p_mini_rollout_from99(seat0,score=1368) | 2:sample7(seat1,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=79.3 n25_prod=8.0 n45_prod=14.0 n45_cheap=2.0 n65_high_prod=6.0 chain_score=51.3 outer_anchor_score=69.4 support_density=16.5 enemy_cluster_risk=70.7
+seed=1193654019 result=W place=1 diff=2113 mode=s7_stable length=103 survival=103
+  standings: 1:sample104_4p_mini_rollout_from99(seat0,score=2113) | 2:sample7(seat1,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=52.1 n25_prod=23.0 n45_prod=33.0 n45_cheap=6.0 n65_high_prod=12.0 chain_score=57.3 outer_anchor_score=97.6 support_density=34.5 enemy_cluster_risk=113.9
+seed=1207918184 result=L place=2 diff=-2628 mode=s8_burst length=210 survival=103
+  standings: 1:sample7(seat1,score=2628) | 2:sample104_4p_mini_rollout_from99(seat0,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=80.3 n25_prod=12.0 n45_prod=20.0 n45_cheap=4.0 n65_high_prod=6.0 chain_score=66.4 outer_anchor_score=94.2 support_density=30.5 enemy_cluster_risk=91.1
+seed=1661603053 result=W place=1 diff=2136 mode=lane_anchor length=133 survival=133
+  standings: 1:sample104_4p_mini_rollout_from99(seat0,score=2136) | 2:sample7(seat1,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=68.6 n25_prod=8.0 n45_prod=25.0 n45_cheap=4.0 n65_high_prod=7.0 chain_score=56.7 outer_anchor_score=81.7 support_density=21.5 enemy_cluster_risk=80.0
+seed=595398685 result=L place=2 diff=-1114 mode=s7_stable length=219 survival=136
+  standings: 1:hairate5(seat3,score=1114) | 2:sample104_4p_mini_rollout_from99(seat0,score=0) | 3:sample7(seat1,score=0) | 4:sample8(seat2,score=0)
+  features: enemy_dist=69.2 n25_prod=11.0 n45_prod=13.0 n45_cheap=3.0 n65_high_prod=3.0 chain_score=40.9 outer_anchor_score=42.1 support_density=15.0 enemy_cluster_risk=60.6
+seed=267117348 result=L place=2 diff=-1269 mode=s7_stable length=175 survival=71
+  standings: 1:sample7(seat1,score=1269) | 2:sample104_4p_mini_rollout_from99(seat0,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=67.4 n25_prod=2.0 n45_prod=18.0 n45_cheap=4.0 n65_high_prod=4.0 chain_score=45.4 outer_anchor_score=49.4 support_density=8.0 enemy_cluster_risk=91.2
+seed=1375371788 result=L place=2 diff=-1887 mode=lane_anchor length=141 survival=97
+  standings: 1:sample7(seat1,score=1887) | 2:sample104_4p_mini_rollout_from99(seat0,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=71.8 n25_prod=7.0 n45_prod=20.0 n45_cheap=2.0 n65_high_prod=9.0 chain_score=57.8 outer_anchor_score=69.3 support_density=14.5 enemy_cluster_risk=84.0
+seed=203644404 result=L place=2 diff=-2941 mode=s7_stable length=195 survival=138
+  standings: 1:sample8(seat2,score=2941) | 2:sample104_4p_mini_rollout_from99(seat0,score=0) | 3:sample7(seat1,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=71.4 n25_prod=4.0 n45_prod=22.0 n45_cheap=8.0 n65_high_prod=6.0 chain_score=51.9 outer_anchor_score=72.3 support_density=17.5 enemy_cluster_risk=99.8
+seed=459407471 result=L place=2 diff=-2446 mode=lane_anchor length=152 survival=131
+  standings: 1:sample8(seat2,score=2446) | 2:sample104_4p_mini_rollout_from99(seat0,score=0) | 3:sample7(seat1,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=67.8 n25_prod=9.0 n45_prod=23.0 n45_cheap=6.0 n65_high_prod=6.0 chain_score=62.4 outer_anchor_score=82.6 support_density=23.0 enemy_cluster_risk=89.3
+seed=1407436312 result=W place=1 diff=1460 mode=winner_outer_domain length=90 survival=90
+  standings: 1:sample104_4p_mini_rollout_from99(seat0,score=1460) | 2:sample7(seat1,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=80.7 n25_prod=4.0 n45_prod=19.0 n45_cheap=4.0 n65_high_prod=6.0 chain_score=55.5 outer_anchor_score=62.7 support_density=11.0 enemy_cluster_risk=93.4
+seed=460368473 result=L place=2 diff=-1726 mode=s7_stable length=86 survival=68
+  standings: 1:sample8(seat2,score=1726) | 2:sample104_4p_mini_rollout_from99(seat0,score=0) | 3:sample7(seat1,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=50.6 n25_prod=15.0 n45_prod=24.0 n45_cheap=3.0 n65_high_prod=4.0 chain_score=47.2 outer_anchor_score=76.0 support_density=20.0 enemy_cluster_risk=96.0
+seed=734500522 result=L place=3 diff=-6747 mode=winner_outer_domain length=499 survival=147
+  standings: 1:sample8(seat2,score=6747) | 2:hairate5(seat3,score=677) | 3:sample104_4p_mini_rollout_from99(seat0,score=0) | 4:sample7(seat1,score=0)
+  features: enemy_dist=67.9 n25_prod=6.0 n45_prod=24.0 n45_cheap=6.0 n65_high_prod=6.0 chain_score=56.0 outer_anchor_score=73.1 support_density=15.0 enemy_cluster_risk=122.1
+seed=1616261939 result=L place=2 diff=-2064 mode=s8_burst length=176 survival=129
+  standings: 1:sample7(seat1,score=2064) | 2:sample104_4p_mini_rollout_from99(seat0,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=69.6 n25_prod=14.0 n45_prod=19.0 n45_cheap=3.0 n65_high_prod=10.0 chain_score=61.3 outer_anchor_score=90.2 support_density=29.5 enemy_cluster_risk=94.3
+seed=1680314452 result=L place=2 diff=-2336 mode=lane_anchor length=160 survival=96
+  standings: 1:sample8(seat2,score=2336) | 2:sample104_4p_mini_rollout_from99(seat0,score=0) | 3:sample7(seat1,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=69.8 n25_prod=6.0 n45_prod=30.0 n45_cheap=3.0 n65_high_prod=11.0 chain_score=57.1 outer_anchor_score=83.4 support_density=30.5 enemy_cluster_risk=118.5
+seed=860430514 result=L place=2 diff=-1508 mode=s7_stable length=139 survival=138
+  standings: 1:sample7(seat1,score=1508) | 2:sample104_4p_mini_rollout_from99(seat0,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=50.3 n25_prod=13.0 n45_prod=27.0 n45_cheap=3.0 n65_high_prod=10.0 chain_score=59.5 outer_anchor_score=82.8 support_density=24.5 enemy_cluster_risk=133.7
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars>
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> Write-Host "=== sample108 one-ply filter ==="
+=== sample108 one-ply filter ===
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> C:\tmp\ow\Scripts\python.exe tools\diagnose_4p.py `
+>>   --agent sample108_4p_oneply_filter_from104\main.py `
+>>   --opponent sample7\main.py `
+>>   --opponent sample8\main.py `
+>>   --opponent bots\hairate5.py `
+>>   --seed-list $flip `
+>>   --show-features `
+>>   --quiet-env-noise
+seed=98834007 result=L place=2 diff=-2106 mode=lane_anchor length=147 survival=146
+  standings: 1:sample8(seat2,score=2106) | 2:sample108_4p_oneply_filter_from104(seat0,score=0) | 3:sample7(seat1,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=68.8 n25_prod=10.0 n45_prod=28.0 n45_cheap=4.0 n65_high_prod=8.0 chain_score=64.1 outer_anchor_score=80.9 support_density=22.0 enemy_cluster_risk=128.9
+seed=1522561038 result=L place=2 diff=-11301 mode=s7_stable length=499 survival=499
+  standings: 1:sample7(seat1,score=11743) | 2:sample108_4p_oneply_filter_from104(seat0,score=442) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=50.3 n25_prod=11.0 n45_prod=21.0 n45_cheap=6.0 n65_high_prod=5.0 chain_score=33.2 outer_anchor_score=52.3 support_density=18.0 enemy_cluster_risk=97.1
+seed=460985805 result=W place=1 diff=3102 mode=s7_stable length=196 survival=196
+  standings: 1:sample108_4p_oneply_filter_from104(seat0,score=3102) | 2:sample7(seat1,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=84.4 n25_prod=8.0 n45_prod=18.0 n45_cheap=2.0 n65_high_prod=5.0 chain_score=54.5 outer_anchor_score=83.5 support_density=32.5 enemy_cluster_risk=65.1
+seed=1543026641 result=L place=2 diff=-1449 mode=s7_stable length=214 survival=103
+  standings: 1:sample7(seat1,score=1449) | 2:sample108_4p_oneply_filter_from104(seat0,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=68.4 n25_prod=2.0 n45_prod=16.0 n45_cheap=8.0 n65_high_prod=2.0 chain_score=28.5 outer_anchor_score=37.7 support_density=7.5 enemy_cluster_risk=72.2
+seed=719921714 result=L place=2 diff=-1873 mode=s7_stable length=233 survival=79
+  standings: 1:sample8(seat2,score=1873) | 2:sample108_4p_oneply_filter_from104(seat0,score=0) | 3:sample7(seat1,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=53.1 n25_prod=18.0 n45_prod=33.0 n45_cheap=6.0 n65_high_prod=11.0 chain_score=58.8 outer_anchor_score=94.6 support_density=37.0 enemy_cluster_risk=154.6
+seed=808936432 result=W place=1 diff=2248 mode=s8_burst length=180 survival=180
+  standings: 1:sample108_4p_oneply_filter_from104(seat0,score=2248) | 2:sample7(seat1,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=79.3 n25_prod=8.0 n45_prod=14.0 n45_cheap=2.0 n65_high_prod=6.0 chain_score=51.3 outer_anchor_score=69.4 support_density=16.5 enemy_cluster_risk=70.7
+seed=1193654019 result=W place=1 diff=2167 mode=s7_stable length=105 survival=105
+  standings: 1:sample108_4p_oneply_filter_from104(seat0,score=2167) | 2:sample7(seat1,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=52.1 n25_prod=23.0 n45_prod=33.0 n45_cheap=6.0 n65_high_prod=12.0 chain_score=57.3 outer_anchor_score=97.6 support_density=34.5 enemy_cluster_risk=113.9
+seed=1207918184 result=L place=2 diff=-2634 mode=s8_burst length=210 survival=103
+  standings: 1:sample7(seat1,score=2634) | 2:sample108_4p_oneply_filter_from104(seat0,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=80.3 n25_prod=12.0 n45_prod=20.0 n45_cheap=4.0 n65_high_prod=6.0 chain_score=66.4 outer_anchor_score=94.2 support_density=30.5 enemy_cluster_risk=91.1
+seed=1661603053 result=L place=2 diff=-2802 mode=lane_anchor length=168 survival=133
+  standings: 1:sample7(seat1,score=2802) | 2:sample108_4p_oneply_filter_from104(seat0,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=68.6 n25_prod=8.0 n45_prod=25.0 n45_cheap=4.0 n65_high_prod=7.0 chain_score=56.7 outer_anchor_score=81.7 support_density=21.5 enemy_cluster_risk=80.0
+seed=595398685 result=L place=2 diff=-1114 mode=s7_stable length=219 survival=136
+  standings: 1:hairate5(seat3,score=1114) | 2:sample108_4p_oneply_filter_from104(seat0,score=0) | 3:sample7(seat1,score=0) | 4:sample8(seat2,score=0)
+  features: enemy_dist=69.2 n25_prod=11.0 n45_prod=13.0 n45_cheap=3.0 n65_high_prod=3.0 chain_score=40.9 outer_anchor_score=42.1 support_density=15.0 enemy_cluster_risk=60.6
+seed=267117348 result=L place=2 diff=-1269 mode=s7_stable length=175 survival=71
+  standings: 1:sample7(seat1,score=1269) | 2:sample108_4p_oneply_filter_from104(seat0,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=67.4 n25_prod=2.0 n45_prod=18.0 n45_cheap=4.0 n65_high_prod=4.0 chain_score=45.4 outer_anchor_score=49.4 support_density=8.0 enemy_cluster_risk=91.2
+seed=1375371788 result=L place=2 diff=-1887 mode=lane_anchor length=141 survival=97
+  standings: 1:sample7(seat1,score=1887) | 2:sample108_4p_oneply_filter_from104(seat0,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=71.8 n25_prod=7.0 n45_prod=20.0 n45_cheap=2.0 n65_high_prod=9.0 chain_score=57.8 outer_anchor_score=69.3 support_density=14.5 enemy_cluster_risk=84.0
+seed=203644404 result=L place=2 diff=-1908 mode=s7_stable length=166 survival=124
+  standings: 1:sample8(seat2,score=1908) | 2:sample108_4p_oneply_filter_from104(seat0,score=0) | 3:sample7(seat1,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=71.4 n25_prod=4.0 n45_prod=22.0 n45_cheap=8.0 n65_high_prod=6.0 chain_score=51.9 outer_anchor_score=72.3 support_density=17.5 enemy_cluster_risk=99.8
+seed=459407471 result=L place=2 diff=-2629 mode=lane_anchor length=145 survival=94
+  standings: 1:sample8(seat2,score=2629) | 2:sample108_4p_oneply_filter_from104(seat0,score=0) | 3:sample7(seat1,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=67.8 n25_prod=9.0 n45_prod=23.0 n45_cheap=6.0 n65_high_prod=6.0 chain_score=62.4 outer_anchor_score=82.6 support_density=23.0 enemy_cluster_risk=89.3
+seed=1407436312 result=W place=1 diff=1460 mode=winner_outer_domain length=90 survival=90
+  standings: 1:sample108_4p_oneply_filter_from104(seat0,score=1460) | 2:sample7(seat1,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=80.7 n25_prod=4.0 n45_prod=19.0 n45_cheap=4.0 n65_high_prod=6.0 chain_score=55.5 outer_anchor_score=62.7 support_density=11.0 enemy_cluster_risk=93.4
+seed=460368473 result=L place=2 diff=-1726 mode=s7_stable length=86 survival=68
+  standings: 1:sample8(seat2,score=1726) | 2:sample108_4p_oneply_filter_from104(seat0,score=0) | 3:sample7(seat1,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=50.6 n25_prod=15.0 n45_prod=24.0 n45_cheap=3.0 n65_high_prod=4.0 chain_score=47.2 outer_anchor_score=76.0 support_density=20.0 enemy_cluster_risk=96.0
+seed=734500522 result=L place=2 diff=-8657 mode=winner_outer_domain length=499 survival=499
+  standings: 1:sample7(seat1,score=8765) | 2:sample108_4p_oneply_filter_from104(seat0,score=108) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=67.9 n25_prod=6.0 n45_prod=24.0 n45_cheap=6.0 n65_high_prod=6.0 chain_score=56.0 outer_anchor_score=73.1 support_density=15.0 enemy_cluster_risk=122.1
+seed=1616261939 result=W place=1 diff=2810 mode=s8_burst length=137 survival=137
+  standings: 1:sample108_4p_oneply_filter_from104(seat0,score=2810) | 2:sample7(seat1,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=69.6 n25_prod=14.0 n45_prod=19.0 n45_cheap=3.0 n65_high_prod=10.0 chain_score=61.3 outer_anchor_score=90.2 support_density=29.5 enemy_cluster_risk=94.3
+seed=1680314452 result=L place=2 diff=-2336 mode=lane_anchor length=160 survival=96
+  standings: 1:sample8(seat2,score=2336) | 2:sample108_4p_oneply_filter_from104(seat0,score=0) | 3:sample7(seat1,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=69.8 n25_prod=6.0 n45_prod=30.0 n45_cheap=3.0 n65_high_prod=11.0 chain_score=57.1 outer_anchor_score=83.4 support_density=30.5 enemy_cluster_risk=118.5
+seed=860430514 result=L place=2 diff=-994 mode=s7_stable length=118 survival=117
+  standings: 1:sample7(seat1,score=994) | 2:sample108_4p_oneply_filter_from104(seat0,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=50.3 n25_prod=13.0 n45_prod=27.0 n45_cheap=3.0 n65_high_prod=10.0 chain_score=59.5 outer_anchor_score=82.8 support_density=24.5 enemy_cluster_risk=133.7
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars>
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> Write-Host "=== sample99 current proven branch ==="
+=== sample99 current proven branch ===
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> C:\tmp\ow\Scripts\python.exe tools\diagnose_4p.py `
+>>   --agent sample99_4p_s8_coord_only_from98\main.py `
+>>   --opponent sample7\main.py `
+>>   --opponent sample8\main.py `
+>>   --opponent bots\hairate5.py `
+>>   --seed-list $flip `
+>>   --show-features `
+>>   --quiet-env-noise
+seed=98834007 result=L place=2 diff=-2106 mode=lane_anchor length=147 survival=146
+  standings: 1:sample8(seat2,score=2106) | 2:sample99_4p_s8_coord_only_from98(seat0,score=0) | 3:sample7(seat1,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=68.8 n25_prod=10.0 n45_prod=28.0 n45_cheap=4.0 n65_high_prod=8.0 chain_score=64.1 outer_anchor_score=80.9 support_density=22.0 enemy_cluster_risk=128.9
+seed=1522561038 result=L place=2 diff=-10541 mode=s7_stable length=499 survival=499
+  standings: 1:sample7(seat1,score=10779) | 2:sample99_4p_s8_coord_only_from98(seat0,score=238) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=50.3 n25_prod=11.0 n45_prod=21.0 n45_cheap=6.0 n65_high_prod=5.0 chain_score=33.2 outer_anchor_score=52.3 support_density=18.0 enemy_cluster_risk=97.1
+seed=460985805 result=W place=1 diff=2155 mode=s7_stable length=191 survival=191
+  standings: 1:sample99_4p_s8_coord_only_from98(seat0,score=2155) | 2:sample7(seat1,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=84.4 n25_prod=8.0 n45_prod=18.0 n45_cheap=2.0 n65_high_prod=5.0 chain_score=54.5 outer_anchor_score=83.5 support_density=32.5 enemy_cluster_risk=65.1
+seed=1543026641 result=L place=2 diff=-1449 mode=s7_stable length=214 survival=103
+  standings: 1:sample7(seat1,score=1449) | 2:sample99_4p_s8_coord_only_from98(seat0,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=68.4 n25_prod=2.0 n45_prod=16.0 n45_cheap=8.0 n65_high_prod=2.0 chain_score=28.5 outer_anchor_score=37.7 support_density=7.5 enemy_cluster_risk=72.2
+seed=719921714 result=L place=2 diff=-1873 mode=s7_stable length=233 survival=79
+  standings: 1:sample8(seat2,score=1873) | 2:sample99_4p_s8_coord_only_from98(seat0,score=0) | 3:sample7(seat1,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=53.1 n25_prod=18.0 n45_prod=33.0 n45_cheap=6.0 n65_high_prod=11.0 chain_score=58.8 outer_anchor_score=94.6 support_density=37.0 enemy_cluster_risk=154.6
+seed=808936432 result=W place=1 diff=1368 mode=s8_burst length=142 survival=142
+  standings: 1:sample99_4p_s8_coord_only_from98(seat0,score=1368) | 2:sample7(seat1,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=79.3 n25_prod=8.0 n45_prod=14.0 n45_cheap=2.0 n65_high_prod=6.0 chain_score=51.3 outer_anchor_score=69.4 support_density=16.5 enemy_cluster_risk=70.7
+seed=1193654019 result=W place=1 diff=2039 mode=s7_stable length=101 survival=101
+  standings: 1:sample99_4p_s8_coord_only_from98(seat0,score=2039) | 2:sample7(seat1,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=52.1 n25_prod=23.0 n45_prod=33.0 n45_cheap=6.0 n65_high_prod=12.0 chain_score=57.3 outer_anchor_score=97.6 support_density=34.5 enemy_cluster_risk=113.9
+seed=1207918184 result=L place=2 diff=-2628 mode=s8_burst length=210 survival=103
+  standings: 1:sample7(seat1,score=2628) | 2:sample99_4p_s8_coord_only_from98(seat0,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=80.3 n25_prod=12.0 n45_prod=20.0 n45_cheap=4.0 n65_high_prod=6.0 chain_score=66.4 outer_anchor_score=94.2 support_density=30.5 enemy_cluster_risk=91.1
+seed=1661603053 result=W place=1 diff=2224 mode=lane_anchor length=145 survival=145
+  standings: 1:sample99_4p_s8_coord_only_from98(seat0,score=2224) | 2:sample7(seat1,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=68.6 n25_prod=8.0 n45_prod=25.0 n45_cheap=4.0 n65_high_prod=7.0 chain_score=56.7 outer_anchor_score=81.7 support_density=21.5 enemy_cluster_risk=80.0
+seed=595398685 result=L place=2 diff=-1114 mode=s7_stable length=219 survival=136
+  standings: 1:hairate5(seat3,score=1114) | 2:sample99_4p_s8_coord_only_from98(seat0,score=0) | 3:sample7(seat1,score=0) | 4:sample8(seat2,score=0)
+  features: enemy_dist=69.2 n25_prod=11.0 n45_prod=13.0 n45_cheap=3.0 n65_high_prod=3.0 chain_score=40.9 outer_anchor_score=42.1 support_density=15.0 enemy_cluster_risk=60.6
+seed=267117348 result=L place=2 diff=-1269 mode=s7_stable length=175 survival=71
+  standings: 1:sample7(seat1,score=1269) | 2:sample99_4p_s8_coord_only_from98(seat0,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=67.4 n25_prod=2.0 n45_prod=18.0 n45_cheap=4.0 n65_high_prod=4.0 chain_score=45.4 outer_anchor_score=49.4 support_density=8.0 enemy_cluster_risk=91.2
+seed=1375371788 result=L place=2 diff=-1887 mode=lane_anchor length=141 survival=97
+  standings: 1:sample7(seat1,score=1887) | 2:sample99_4p_s8_coord_only_from98(seat0,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=71.8 n25_prod=7.0 n45_prod=20.0 n45_cheap=2.0 n65_high_prod=9.0 chain_score=57.8 outer_anchor_score=69.3 support_density=14.5 enemy_cluster_risk=84.0
+seed=203644404 result=L place=2 diff=-2941 mode=s7_stable length=195 survival=138
+  standings: 1:sample8(seat2,score=2941) | 2:sample99_4p_s8_coord_only_from98(seat0,score=0) | 3:sample7(seat1,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=71.4 n25_prod=4.0 n45_prod=22.0 n45_cheap=8.0 n65_high_prod=6.0 chain_score=51.9 outer_anchor_score=72.3 support_density=17.5 enemy_cluster_risk=99.8
+seed=459407471 result=L place=2 diff=-2234 mode=lane_anchor length=148 survival=123
+  standings: 1:sample8(seat2,score=2234) | 2:sample99_4p_s8_coord_only_from98(seat0,score=0) | 3:sample7(seat1,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=67.8 n25_prod=9.0 n45_prod=23.0 n45_cheap=6.0 n65_high_prod=6.0 chain_score=62.4 outer_anchor_score=82.6 support_density=23.0 enemy_cluster_risk=89.3
+seed=1407436312 result=W place=1 diff=1460 mode=winner_outer_domain length=90 survival=90
+  standings: 1:sample99_4p_s8_coord_only_from98(seat0,score=1460) | 2:sample7(seat1,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=80.7 n25_prod=4.0 n45_prod=19.0 n45_cheap=4.0 n65_high_prod=6.0 chain_score=55.5 outer_anchor_score=62.7 support_density=11.0 enemy_cluster_risk=93.4
+seed=460368473 result=L place=2 diff=-1726 mode=s7_stable length=86 survival=68
+  standings: 1:sample8(seat2,score=1726) | 2:sample99_4p_s8_coord_only_from98(seat0,score=0) | 3:sample7(seat1,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=50.6 n25_prod=15.0 n45_prod=24.0 n45_cheap=3.0 n65_high_prod=4.0 chain_score=47.2 outer_anchor_score=76.0 support_density=20.0 enemy_cluster_risk=96.0
+seed=734500522 result=L place=3 diff=-6747 mode=winner_outer_domain length=499 survival=147
+  standings: 1:sample8(seat2,score=6747) | 2:hairate5(seat3,score=677) | 3:sample99_4p_s8_coord_only_from98(seat0,score=0) | 4:sample7(seat1,score=0)
+  features: enemy_dist=67.9 n25_prod=6.0 n45_prod=24.0 n45_cheap=6.0 n65_high_prod=6.0 chain_score=56.0 outer_anchor_score=73.1 support_density=15.0 enemy_cluster_risk=122.1
+seed=1616261939 result=L place=2 diff=-2064 mode=s8_burst length=176 survival=129
+  standings: 1:sample7(seat1,score=2064) | 2:sample99_4p_s8_coord_only_from98(seat0,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=69.6 n25_prod=14.0 n45_prod=19.0 n45_cheap=3.0 n65_high_prod=10.0 chain_score=61.3 outer_anchor_score=90.2 support_density=29.5 enemy_cluster_risk=94.3
+seed=1680314452 result=L place=2 diff=-2336 mode=lane_anchor length=160 survival=96
+  standings: 1:sample8(seat2,score=2336) | 2:sample99_4p_s8_coord_only_from98(seat0,score=0) | 3:sample7(seat1,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=69.8 n25_prod=6.0 n45_prod=30.0 n45_cheap=3.0 n65_high_prod=11.0 chain_score=57.1 outer_anchor_score=83.4 support_density=30.5 enemy_cluster_risk=118.5
+seed=860430514 result=L place=2 diff=-1508 mode=s7_stable length=139 survival=138
+  standings: 1:sample7(seat1,score=1508) | 2:sample99_4p_s8_coord_only_from98(seat0,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=50.3 n25_prod=13.0 n45_prod=27.0 n45_cheap=3.0 n65_high_prod=10.0 chain_score=59.5 outer_anchor_score=82.8 support_density=24.5 enemy_cluster_risk=133.7
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars>
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> Write-Host "=== sample90 older proven branch ==="
+=== sample90 older proven branch ===
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> C:\tmp\ow\Scripts\python.exe tools\diagnose_4p.py `
+>>   --agent sample90_4p_response_gate_step15_from69\main.py `
+>>   --opponent sample7\main.py `
+>>   --opponent sample8\main.py `
+>>   --opponent bots\hairate5.py `
+>>   --seed-list $flip `
+>>   --show-features `
+>>   --quiet-env-noise
+seed=98834007 result=L place=2 diff=-2106 mode=lane_anchor length=147 survival=146
+  standings: 1:sample8(seat2,score=2106) | 2:sample90_4p_response_gate_step15_from69(seat0,score=0) | 3:sample7(seat1,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=68.8 n25_prod=10.0 n45_prod=28.0 n45_cheap=4.0 n65_high_prod=8.0 chain_score=64.1 outer_anchor_score=80.9 support_density=22.0 enemy_cluster_risk=128.9
+seed=1522561038 result=L place=2 diff=-10930 mode=s7_stable length=499 survival=499
+  standings: 1:sample7(seat1,score=11065) | 2:sample90_4p_response_gate_step15_from69(seat0,score=135) | 3:hairate5(seat3,score=30) | 4:sample8(seat2,score=0)
+  features: enemy_dist=50.3 n25_prod=11.0 n45_prod=21.0 n45_cheap=6.0 n65_high_prod=5.0 chain_score=33.2 outer_anchor_score=52.3 support_density=18.0 enemy_cluster_risk=97.1
+seed=460985805 result=W place=1 diff=2155 mode=s7_stable length=191 survival=191
+  standings: 1:sample90_4p_response_gate_step15_from69(seat0,score=2155) | 2:sample7(seat1,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=84.4 n25_prod=8.0 n45_prod=18.0 n45_cheap=2.0 n65_high_prod=5.0 chain_score=54.5 outer_anchor_score=83.5 support_density=32.5 enemy_cluster_risk=65.1
+seed=1543026641 result=L place=2 diff=-1449 mode=s7_stable length=214 survival=103
+  standings: 1:sample7(seat1,score=1449) | 2:sample90_4p_response_gate_step15_from69(seat0,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=68.4 n25_prod=2.0 n45_prod=16.0 n45_cheap=8.0 n65_high_prod=2.0 chain_score=28.5 outer_anchor_score=37.7 support_density=7.5 enemy_cluster_risk=72.2
+seed=719921714 result=L place=2 diff=-1873 mode=s7_stable length=233 survival=79
+  standings: 1:sample8(seat2,score=1873) | 2:sample90_4p_response_gate_step15_from69(seat0,score=0) | 3:sample7(seat1,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=53.1 n25_prod=18.0 n45_prod=33.0 n45_cheap=6.0 n65_high_prod=11.0 chain_score=58.8 outer_anchor_score=94.6 support_density=37.0 enemy_cluster_risk=154.6
+seed=808936432 result=W place=1 diff=3152 mode=s8_burst length=187 survival=187
+  standings: 1:sample90_4p_response_gate_step15_from69(seat0,score=3152) | 2:sample7(seat1,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=79.3 n25_prod=8.0 n45_prod=14.0 n45_cheap=2.0 n65_high_prod=6.0 chain_score=51.3 outer_anchor_score=69.4 support_density=16.5 enemy_cluster_risk=70.7
+seed=1193654019 result=W place=1 diff=2039 mode=s7_stable length=101 survival=101
+  standings: 1:sample90_4p_response_gate_step15_from69(seat0,score=2039) | 2:sample7(seat1,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=52.1 n25_prod=23.0 n45_prod=33.0 n45_cheap=6.0 n65_high_prod=12.0 chain_score=57.3 outer_anchor_score=97.6 support_density=34.5 enemy_cluster_risk=113.9
+seed=1207918184 result=W place=1 diff=2701 mode=s8_burst length=217 survival=217
+  standings: 1:sample90_4p_response_gate_step15_from69(seat0,score=2701) | 2:sample7(seat1,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=80.3 n25_prod=12.0 n45_prod=20.0 n45_cheap=4.0 n65_high_prod=6.0 chain_score=66.4 outer_anchor_score=94.2 support_density=30.5 enemy_cluster_risk=91.1
+seed=1661603053 result=W place=1 diff=2224 mode=lane_anchor length=145 survival=145
+  standings: 1:sample90_4p_response_gate_step15_from69(seat0,score=2224) | 2:sample7(seat1,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=68.6 n25_prod=8.0 n45_prod=25.0 n45_cheap=4.0 n65_high_prod=7.0 chain_score=56.7 outer_anchor_score=81.7 support_density=21.5 enemy_cluster_risk=80.0
+seed=595398685 result=L place=2 diff=-1114 mode=s7_stable length=219 survival=136
+  standings: 1:hairate5(seat3,score=1114) | 2:sample90_4p_response_gate_step15_from69(seat0,score=0) | 3:sample7(seat1,score=0) | 4:sample8(seat2,score=0)
+  features: enemy_dist=69.2 n25_prod=11.0 n45_prod=13.0 n45_cheap=3.0 n65_high_prod=3.0 chain_score=40.9 outer_anchor_score=42.1 support_density=15.0 enemy_cluster_risk=60.6
+seed=267117348 result=L place=2 diff=-1269 mode=s7_stable length=175 survival=71
+  standings: 1:sample7(seat1,score=1269) | 2:sample90_4p_response_gate_step15_from69(seat0,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=67.4 n25_prod=2.0 n45_prod=18.0 n45_cheap=4.0 n65_high_prod=4.0 chain_score=45.4 outer_anchor_score=49.4 support_density=8.0 enemy_cluster_risk=91.2
+seed=1375371788 result=L place=2 diff=-1887 mode=lane_anchor length=141 survival=97
+  standings: 1:sample7(seat1,score=1887) | 2:sample90_4p_response_gate_step15_from69(seat0,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=71.8 n25_prod=7.0 n45_prod=20.0 n45_cheap=2.0 n65_high_prod=9.0 chain_score=57.8 outer_anchor_score=69.3 support_density=14.5 enemy_cluster_risk=84.0
+seed=203644404 result=L place=2 diff=-2941 mode=s7_stable length=195 survival=138
+  standings: 1:sample8(seat2,score=2941) | 2:sample90_4p_response_gate_step15_from69(seat0,score=0) | 3:sample7(seat1,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=71.4 n25_prod=4.0 n45_prod=22.0 n45_cheap=8.0 n65_high_prod=6.0 chain_score=51.9 outer_anchor_score=72.3 support_density=17.5 enemy_cluster_risk=99.8
+seed=459407471 result=L place=2 diff=-2177 mode=lane_anchor length=157 survival=137
+  standings: 1:sample8(seat2,score=2177) | 2:sample90_4p_response_gate_step15_from69(seat0,score=0) | 3:sample7(seat1,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=67.8 n25_prod=9.0 n45_prod=23.0 n45_cheap=6.0 n65_high_prod=6.0 chain_score=62.4 outer_anchor_score=82.6 support_density=23.0 enemy_cluster_risk=89.3
+seed=1407436312 result=W place=1 diff=1460 mode=winner_outer_domain length=90 survival=90
+  standings: 1:sample90_4p_response_gate_step15_from69(seat0,score=1460) | 2:sample7(seat1,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=80.7 n25_prod=4.0 n45_prod=19.0 n45_cheap=4.0 n65_high_prod=6.0 chain_score=55.5 outer_anchor_score=62.7 support_density=11.0 enemy_cluster_risk=93.4
+seed=460368473 result=L place=2 diff=-1726 mode=s7_stable length=86 survival=68
+  standings: 1:sample8(seat2,score=1726) | 2:sample90_4p_response_gate_step15_from69(seat0,score=0) | 3:sample7(seat1,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=50.6 n25_prod=15.0 n45_prod=24.0 n45_cheap=3.0 n65_high_prod=4.0 chain_score=47.2 outer_anchor_score=76.0 support_density=20.0 enemy_cluster_risk=96.0
+seed=734500522 result=L place=3 diff=-10881 mode=winner_outer_domain length=499 survival=118
+  standings: 1:sample8(seat2,score=10881) | 2:sample7(seat1,score=120) | 3:sample90_4p_response_gate_step15_from69(seat0,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=67.9 n25_prod=6.0 n45_prod=24.0 n45_cheap=6.0 n65_high_prod=6.0 chain_score=56.0 outer_anchor_score=73.1 support_density=15.0 enemy_cluster_risk=122.1
+seed=1616261939 result=L place=2 diff=-2276 mode=s8_burst length=199 survival=124
+  standings: 1:sample7(seat1,score=2276) | 2:sample90_4p_response_gate_step15_from69(seat0,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=69.6 n25_prod=14.0 n45_prod=19.0 n45_cheap=3.0 n65_high_prod=10.0 chain_score=61.3 outer_anchor_score=90.2 support_density=29.5 enemy_cluster_risk=94.3
+seed=1680314452 result=L place=2 diff=-2336 mode=lane_anchor length=160 survival=96
+  standings: 1:sample8(seat2,score=2336) | 2:sample90_4p_response_gate_step15_from69(seat0,score=0) | 3:sample7(seat1,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=69.8 n25_prod=6.0 n45_prod=30.0 n45_cheap=3.0 n65_high_prod=11.0 chain_score=57.1 outer_anchor_score=83.4 support_density=30.5 enemy_cluster_risk=118.5
+seed=860430514 result=L place=2 diff=-1508 mode=s7_stable length=139 survival=138
+  standings: 1:sample7(seat1,score=1508) | 2:sample90_4p_response_gate_step15_from69(seat0,score=0) | 3:sample8(seat2,score=0) | 4:hairate5(seat3,score=0)
+  features: enemy_dist=50.3 n25_prod=13.0 n45_prod=27.0 n45_cheap=3.0 n65_high_prod=10.0 chain_score=59.5 outer_anchor_score=82.8 support_density=24.5 enemy_cluster_risk=133.7
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars>
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars>
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars>
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> $seedList = 1..30 | ForEach-Object { Get-Random -Minimum 1 -Maximum 2147483647 }
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> $seedCsv = ($seedList -join ',')
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars>
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> Write-Host "=== random40 seeds ==="
+=== random40 seeds ===
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> Write-Host $seedCsv
+1657384936,1351844563,1351611807,53351919,457793527,1190946047,1890565501,1767874900,1625436819,1798067820,1182650381,786534061,560842328,1319582963,1438880892,1851779903,1209263198,1271979858,1458181989,200181723,638633100,1414997908,1771745689,1397683760,1297486259,157338764,1670733138,165725081,1714320719,651533336
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars>
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> Write-Host "=== sample109 true one-ply ==="
+=== sample109 true one-ply ===
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> C:\tmp\ow\Scripts\python.exe evaluate.py --players 4 `
+>>   --agent sample109_4p_true_oneply_from104\main.py `
+>>   --opponent sample7\main.py `
+>>   --opponent sample8\main.py `
+>>   --opponent bots\hairate5.py `
+>>   --seed-list $seedCsv `
+>>   --workers 8 |
+>>   Select-String 'Wins|Draws|Losses|Crash rate|Average placement|Average score diff|seed='
+
+Wins: 12 (40.0%)
+Draws: 0 (0.0%)
+Losses: 18 (60.0%)
+Crash rate: 0.0%
+Average score diff: -649.07
+Average placement: 1.60
+  seed=1657384936 seat=0 place=1 reward=1  score=1541 best_opp=0    diff=1541  length=206 survival=206 status=DONE
+  seed=1351844563 seat=0 place=1 reward=1  score=651  best_opp=0    diff=651   length=142 survival=142 status=DONE
+  seed=1351611807 seat=0 place=2 reward=-1 score=0    best_opp=780  diff=-780  length=99  survival=88  status=DONE
+  seed=53351919 seat=0 place=2 reward=-1 score=0    best_opp=1221 diff=-1221 length=188 survival=171 status=DONE
+  seed=457793527 seat=0 place=1 reward=1  score=707  best_opp=0    diff=707   length=87  survival=87  status=DONE
+  seed=1190946047 seat=0 place=1 reward=1  score=2020 best_opp=0    diff=2020  length=176 survival=176 status=DONE
+  seed=1890565501 seat=0 place=2 reward=-1 score=0    best_opp=2409 diff=-2409 length=211 survival=109 status=DONE
+  seed=1767874900 seat=0 place=2 reward=-1 score=0    best_opp=2978 diff=-2978 length=266 survival=265 status=DONE
+  seed=1625436819 seat=0 place=1 reward=1  score=1628 best_opp=0    diff=1628  length=148 survival=148 status=DONE
+  seed=1798067820 seat=0 place=2 reward=-1 score=0    best_opp=1449 diff=-1449 length=123 survival=86  status=DONE
+  seed=1182650381 seat=0 place=2 reward=-1 score=0    best_opp=2154 diff=-2154 length=134 survival=83  status=DONE
+  seed=786534061 seat=0 place=1 reward=1  score=1438 best_opp=0    diff=1438  length=95  survival=95  status=DONE
+  seed=560842328 seat=0 place=2 reward=-1 score=0    best_opp=1150 diff=-1150 length=126 survival=125 status=DONE
+  seed=1319582963 seat=0 place=2 reward=-1 score=0    best_opp=2871 diff=-2871 length=199 survival=196 status=DONE
+  seed=1438880892 seat=0 place=1 reward=1  score=2899 best_opp=0    diff=2899  length=185 survival=185 status=DONE
+  seed=1851779903 seat=0 place=2 reward=-1 score=0    best_opp=1062 diff=-1062 length=166 survival=165 status=DONE
+  seed=1209263198 seat=0 place=2 reward=-1 score=0    best_opp=1000 diff=-1000 length=215 survival=126 status=DONE
+  seed=1271979858 seat=0 place=1 reward=1  score=1543 best_opp=0    diff=1543  length=213 survival=213 status=DONE
+  seed=1458181989 seat=0 place=2 reward=-1 score=0    best_opp=876  diff=-876  length=139 survival=87  status=DONE
+  seed=200181723 seat=0 place=2 reward=-1 score=0    best_opp=2096 diff=-2096 length=147 survival=98  status=DONE
+  seed=638633100 seat=0 place=2 reward=-1 score=0    best_opp=838  diff=-838  length=150 survival=62  status=DONE
+  seed=1414997908 seat=0 place=2 reward=-1 score=0    best_opp=1403 diff=-1403 length=217 survival=112 status=DONE
+  seed=1771745689 seat=0 place=2 reward=-1 score=0    best_opp=4439 diff=-4439 length=230 survival=104 status=DONE
+  seed=1397683760 seat=0 place=1 reward=1  score=1894 best_opp=0    diff=1894  length=160 survival=160 status=DONE
+  seed=1297486259 seat=0 place=2 reward=-1 score=0    best_opp=2858 diff=-2858 length=183 survival=112 status=DONE
+  seed=157338764 seat=0 place=1 reward=1  score=2327 best_opp=0    diff=2327  length=164 survival=164 status=DONE
+  seed=1670733138 seat=0 place=1 reward=1  score=1620 best_opp=0    diff=1620  length=129 survival=129 status=DONE
+  seed=165725081 seat=0 place=2 reward=-1 score=0    best_opp=1243 diff=-1243 length=103 survival=102 status=DONE
+  seed=1714320719 seat=0 place=1 reward=1  score=1258 best_opp=0    diff=1258  length=106 survival=106 status=DONE
+  seed=651533336 seat=0 place=2 reward=-1 score=0    best_opp=8171 diff=-8171 length=372 survival=123 status=DONE
+
+
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars>
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> Write-Host "=== sample110 one-ply coord ==="
+=== sample110 one-ply coord ===
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> C:\tmp\ow\Scripts\python.exe evaluate.py --players 4 `
+>>   --agent sample110_4p_oneply_coord_from109\main.py `
+>>   --opponent sample7\main.py `
+>>   --opponent sample8\main.py `
+>>   --opponent bots\hairate5.py `
+>>   --seed-list $seedCsv `
+>>   --workers 8 |
+>>   Select-String 'Wins|Draws|Losses|Crash rate|Average placement|Average score diff|seed='
+
+Wins: 13 (43.3%)
+Draws: 0 (0.0%)
+Losses: 17 (56.7%)
+Crash rate: 0.0%
+Average score diff: -651.37
+Average placement: 1.60
+  seed=1657384936 seat=0 place=1 reward=1  score=1541 best_opp=0    diff=1541  length=206 survival=206 status=DONE
+  seed=1351844563 seat=0 place=1 reward=1  score=919  best_opp=0    diff=919   length=177 survival=177 status=DONE
+  seed=1351611807 seat=0 place=2 reward=-1 score=0    best_opp=802  diff=-802  length=99  survival=88  status=DONE
+  seed=53351919 seat=0 place=2 reward=-1 score=0    best_opp=1221 diff=-1221 length=188 survival=171 status=DONE
+  seed=457793527 seat=0 place=1 reward=1  score=1162 best_opp=0    diff=1162  length=104 survival=104 status=DONE
+  seed=1190946047 seat=0 place=1 reward=1  score=2146 best_opp=0    diff=2146  length=179 survival=179 status=DONE
+  seed=1890565501 seat=0 place=2 reward=-1 score=0    best_opp=2045 diff=-2045 length=221 survival=154 status=DONE
+  seed=1767874900 seat=0 place=2 reward=-1 score=0    best_opp=2978 diff=-2978 length=266 survival=265 status=DONE
+  seed=1625436819 seat=0 place=1 reward=1  score=976  best_opp=0    diff=976   length=118 survival=118 status=DONE
+  seed=1798067820 seat=0 place=2 reward=-1 score=0    best_opp=1449 diff=-1449 length=123 survival=86  status=DONE
+  seed=1182650381 seat=0 place=2 reward=-1 score=0    best_opp=1661 diff=-1661 length=107 survival=67  status=DONE
+  seed=786534061 seat=0 place=1 reward=1  score=1438 best_opp=0    diff=1438  length=95  survival=95  status=DONE
+  seed=560842328 seat=0 place=2 reward=-1 score=0    best_opp=2425 diff=-2425 length=137 survival=107 status=DONE
+  seed=1319582963 seat=0 place=2 reward=-1 score=0    best_opp=1969 diff=-1969 length=185 survival=177 status=DONE
+  seed=1438880892 seat=0 place=1 reward=1  score=2769 best_opp=0    diff=2769  length=181 survival=181 status=DONE
+  seed=1851779903 seat=0 place=2 reward=-1 score=0    best_opp=1062 diff=-1062 length=166 survival=165 status=DONE
+  seed=1209263198 seat=0 place=2 reward=-1 score=0    best_opp=1562 diff=-1562 length=168 survival=105 status=DONE
+  seed=1271979858 seat=0 place=1 reward=1  score=1256 best_opp=0    diff=1256  length=198 survival=198 status=DONE
+  seed=1458181989 seat=0 place=2 reward=-1 score=0    best_opp=876  diff=-876  length=139 survival=87  status=DONE
+  seed=200181723 seat=0 place=2 reward=-1 score=0    best_opp=1861 diff=-1861 length=165 survival=98  status=DONE
+  seed=638633100 seat=0 place=2 reward=-1 score=0    best_opp=1207 diff=-1207 length=177 survival=176 status=DONE
+  seed=1414997908 seat=0 place=3 reward=-1 score=0    best_opp=6505 diff=-6505 length=499 survival=106 status=DONE
+  seed=1771745689 seat=0 place=2 reward=-1 score=0    best_opp=2657 diff=-2657 length=159 survival=108 status=DONE
+  seed=1397683760 seat=0 place=1 reward=1  score=2814 best_opp=0    diff=2814  length=181 survival=181 status=DONE
+  seed=1297486259 seat=0 place=2 reward=-1 score=0    best_opp=2858 diff=-2858 length=183 survival=112 status=DONE
+  seed=157338764 seat=0 place=1 reward=1  score=2326 best_opp=0    diff=2326  length=166 survival=166 status=DONE
+  seed=1670733138 seat=0 place=1 reward=1  score=1620 best_opp=0    diff=1620  length=129 survival=129 status=DONE
+  seed=165725081 seat=0 place=1 reward=1  score=1494 best_opp=0    diff=1494  length=157 survival=157 status=DONE
+  seed=1714320719 seat=0 place=1 reward=1  score=1307 best_opp=0    diff=1307  length=107 survival=107 status=DONE
+  seed=651533336 seat=0 place=2 reward=-1 score=0    best_opp=8171 diff=-8171 length=372 survival=123 status=DONE
+
+
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars>
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> Write-Host "=== sample90 proven baseline ==="
+=== sample90 proven baseline ===
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> C:\tmp\ow\Scripts\python.exe evaluate.py --players 4 `
+>>   --agent sample90_4p_response_gate_step15_from69\main.py `
+>>   --opponent sample7\main.py `
+>>   --opponent sample8\main.py `
+>>   --opponent bots\hairate5.py `
+>>   --seed-list $seedCsv `
+>>   --workers 8 |
+>>   Select-String 'Wins|Draws|Losses|Crash rate|Average placement|Average score diff|seed='
+
+Wins: 9 (30.0%)
+Draws: 0 (0.0%)
+Losses: 21 (70.0%)
+Crash rate: 0.0%
+Average score diff: -1394.60
+Average placement: 1.70
+  seed=1657384936 seat=0 place=2 reward=-1 score=0    best_opp=1928 diff=-1928 length=231 survival=116 status=DONE
+  seed=1351844563 seat=0 place=1 reward=1  score=1532 best_opp=0    diff=1532  length=221 survival=221 status=DONE
+  seed=1351611807 seat=0 place=2 reward=-1 score=0    best_opp=1296 diff=-1296 length=137 survival=105 status=DONE
+  seed=53351919 seat=0 place=1 reward=1  score=1301 best_opp=0    diff=1301  length=134 survival=134 status=DONE
+  seed=457793527 seat=0 place=2 reward=-1 score=0    best_opp=1299 diff=-1299 length=144 survival=143 status=DONE
+  seed=1190946047 seat=0 place=2 reward=-1 score=0    best_opp=2627 diff=-2627 length=244 survival=151 status=DONE
+  seed=1890565501 seat=0 place=2 reward=-1 score=0    best_opp=2820 diff=-2820 length=164 survival=100 status=DONE
+  seed=1767874900 seat=0 place=2 reward=-1 score=0    best_opp=2610 diff=-2610 length=196 survival=158 status=DONE
+  seed=1625436819 seat=0 place=2 reward=-1 score=306  best_opp=10061 diff=-9755 length=499 survival=499 status=DONE
+  seed=1798067820 seat=0 place=1 reward=1  score=1970 best_opp=0    diff=1970  length=159 survival=159 status=DONE
+  seed=1182650381 seat=0 place=2 reward=-1 score=0    best_opp=3190 diff=-3190 length=194 survival=161 status=DONE
+  seed=786534061 seat=0 place=1 reward=1  score=964  best_opp=0    diff=964   length=84  survival=84  status=DONE
+  seed=560842328 seat=0 place=2 reward=-1 score=0    best_opp=1860 diff=-1860 length=126 survival=125 status=DONE
+  seed=1319582963 seat=0 place=2 reward=-1 score=0    best_opp=1803 diff=-1803 length=197 survival=196 status=DONE
+  seed=1438880892 seat=0 place=1 reward=1  score=2100 best_opp=0    diff=2100  length=171 survival=171 status=DONE
+  seed=1851779903 seat=0 place=2 reward=-1 score=0    best_opp=885  diff=-885  length=141 survival=140 status=DONE
+  seed=1209263198 seat=0 place=2 reward=-1 score=0    best_opp=1294 diff=-1294 length=166 survival=103 status=DONE
+  seed=1271979858 seat=0 place=1 reward=1  score=1064 best_opp=0    diff=1064  length=240 survival=240 status=DONE
+  seed=1458181989 seat=0 place=2 reward=-1 score=0    best_opp=850  diff=-850  length=154 survival=153 status=DONE
+  seed=200181723 seat=0 place=2 reward=-1 score=0    best_opp=5039 diff=-5039 length=190 survival=101 status=DONE
+  seed=638633100 seat=0 place=2 reward=-1 score=0    best_opp=2263 diff=-2263 length=173 survival=172 status=DONE
+  seed=1414997908 seat=0 place=2 reward=-1 score=0    best_opp=1234 diff=-1234 length=204 survival=151 status=DONE
+  seed=1771745689 seat=0 place=2 reward=-1 score=0    best_opp=2687 diff=-2687 length=185 survival=184 status=DONE
+  seed=1397683760 seat=0 place=2 reward=-1 score=0    best_opp=2913 diff=-2913 length=137 survival=98  status=DONE
+  seed=1297486259 seat=0 place=2 reward=-1 score=0    best_opp=2610 diff=-2610 length=234 survival=118 status=DONE
+  seed=157338764 seat=0 place=1 reward=1  score=2315 best_opp=0    diff=2315  length=151 survival=151 status=DONE
+  seed=1670733138 seat=0 place=1 reward=1  score=1232 best_opp=0    diff=1232  length=135 survival=135 status=DONE
+  seed=165725081 seat=0 place=2 reward=-1 score=0    best_opp=2412 diff=-2412 length=126 survival=125 status=DONE
+  seed=1714320719 seat=0 place=1 reward=1  score=2073 best_opp=0    diff=2073  length=127 survival=127 status=DONE
+  seed=651533336 seat=0 place=2 reward=-1 score=270  best_opp=5284 diff=-5014 length=499 survival=499 status=DONE
+
+
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> C:\tmp\ow\Scripts\python.exe evaluate.py --players 4 `
+>>   --agent 6_23\main.py `
+>>   --opponent sample7\main.py `
+>>   --opponent sample8\main.py `
+>>   --opponent bots\hairate5.py `
+>>   --seed-list $seedCsv `
+>>   --workers 8 |
+>>   Select-String 'Wins|Draws|Losses|Crash rate|Average placement|Average score diff|seed='
+
+Wins: 8 (26.7%)
+Draws: 0 (0.0%)
+Losses: 22 (73.3%)
+Crash rate: 0.0%
+Average score diff: -1212.30
+Average placement: 1.73
+  seed=1657384936 seat=0 place=2 reward=-1 score=0    best_opp=1360 diff=-1360 length=250 survival=249 status=DONE
+  seed=1351844563 seat=0 place=2 reward=-1 score=0    best_opp=1028 diff=-1028 length=259 survival=258 status=DONE
+  seed=1351611807 seat=0 place=2 reward=-1 score=0    best_opp=1302 diff=-1302 length=166 survival=165 status=DONE
+  seed=53351919 seat=0 place=1 reward=1  score=1654 best_opp=0    diff=1654  length=133 survival=133 status=DONE
+  seed=457793527 seat=0 place=2 reward=-1 score=0    best_opp=603  diff=-603  length=90  survival=30  status=DONE
+  seed=1190946047 seat=0 place=2 reward=-1 score=0    best_opp=1876 diff=-1876 length=244 survival=137 status=DONE
+  seed=1890565501 seat=0 place=2 reward=-1 score=0    best_opp=2105 diff=-2105 length=136 survival=109 status=DONE
+  seed=1767874900 seat=0 place=2 reward=-1 score=0    best_opp=2545 diff=-2545 length=225 survival=224 status=DONE
+  seed=1625436819 seat=0 place=1 reward=1  score=741  best_opp=0    diff=741   length=142 survival=142 status=DONE
+  seed=1798067820 seat=0 place=1 reward=1  score=1848 best_opp=0    diff=1848  length=154 survival=154 status=DONE
+  seed=1182650381 seat=0 place=2 reward=-1 score=0    best_opp=1982 diff=-1982 length=130 survival=129 status=DONE
+  seed=786534061 seat=0 place=1 reward=1  score=1036 best_opp=0    diff=1036  length=105 survival=105 status=DONE
+  seed=560842328 seat=0 place=2 reward=-1 score=0    best_opp=2254 diff=-2254 length=113 survival=112 status=DONE
+  seed=1319582963 seat=0 place=1 reward=1  score=2086 best_opp=0    diff=2086  length=148 survival=148 status=DONE
+  seed=1438880892 seat=0 place=2 reward=-1 score=0    best_opp=2112 diff=-2112 length=182 survival=111 status=DONE
+  seed=1851779903 seat=0 place=2 reward=-1 score=0    best_opp=1300 diff=-1300 length=236 survival=235 status=DONE
+  seed=1209263198 seat=0 place=2 reward=-1 score=0    best_opp=1118 diff=-1118 length=217 survival=102 status=DONE
+  seed=1271979858 seat=0 place=2 reward=-1 score=0    best_opp=834  diff=-834  length=122 survival=121 status=DONE
+  seed=1458181989 seat=0 place=2 reward=-1 score=0    best_opp=1130 diff=-1130 length=159 survival=104 status=DONE
+  seed=200181723 seat=0 place=2 reward=-1 score=0    best_opp=2148 diff=-2148 length=180 survival=141 status=DONE
+  seed=638633100 seat=0 place=2 reward=-1 score=0    best_opp=1590 diff=-1590 length=113 survival=73  status=DONE
+  seed=1414997908 seat=0 place=2 reward=-1 score=159  best_opp=5292 diff=-5133 length=499 survival=499 status=DONE
+  seed=1771745689 seat=0 place=2 reward=-1 score=0    best_opp=2878 diff=-2878 length=167 survival=166 status=DONE
+  seed=1397683760 seat=0 place=1 reward=1  score=3224 best_opp=0    diff=3224  length=144 survival=144 status=DONE
+  seed=1297486259 seat=0 place=2 reward=-1 score=0    best_opp=2516 diff=-2516 length=196 survival=195 status=DONE
+  seed=157338764 seat=0 place=2 reward=-1 score=0    best_opp=3610 diff=-3610 length=226 survival=165 status=DONE
+  seed=1670733138 seat=0 place=1 reward=1  score=1501 best_opp=0    diff=1501  length=201 survival=201 status=DONE
+  seed=165725081 seat=0 place=1 reward=1  score=1570 best_opp=0    diff=1570  length=169 survival=169 status=DONE
+  seed=1714320719 seat=0 place=2 reward=-1 score=0    best_opp=2751 diff=-2751 length=201 survival=200 status=DONE
+  seed=651533336 seat=0 place=2 reward=-1 score=212  best_opp=8066 diff=-7854 length=499 survival=499 status=DONE
+
+
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars>
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> C:\tmp\ow\Scripts\python.exe .\tools\selector_probe_4p.py `
+>>   --agent .\sample110_4p_oneply_coord_from109\main.py `
+>>   --seed-list '737568381' `
+>>   --csv `
+>>   --quiet-env-noise
+seed,seat,mode,enemy_dist,n25_count,n25_prod,n25_ships,n25_cheap,n45_prod,n45_ships,n45_cheap,n65_high_prod,chain_score,outer_anchor_score,support_density,enemy_cluster_risk,planet_count
+737568381,0,s7_stable,41.6514,3.0000,7.0000,124.0000,0.0000,16.0000,207.0000,1.0000,4.0000,33.9618,54.0656,17.5000,85.1090,24.0000
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> $seeds = '1657384936,1351844563,165725081,1351611807,1319582963'
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars>
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> C:\tmp\ow\Scripts\python.exe .\tools\selector_probe_4p.py `
+>>   --agent .\sample112_4p_s7_fixed_from110\main.py `
+>>   --seed-list $seeds `
+>>   --csv `
+>>   --quiet-env-noise
+seed,seat,mode,enemy_dist,n25_count,n25_prod,n25_ships,n25_cheap,n45_prod,n45_ships,n45_cheap,n65_high_prod,chain_score,outer_anchor_score,support_density,enemy_cluster_risk,planet_count
+1657384936,0,s7_stable,82.2455,3.0000,4.0000,35.0000,2.0000,8.0000,69.0000,4.0000,2.0000,22.1246,33.2843,3.5000,40.3870,24.0000
+1351844563,0,s7_stable,68.4571,3.0000,4.0000,69.0000,2.0000,13.0000,225.0000,3.0000,2.0000,26.6163,48.1563,6.0000,64.5200,20.0000
+165725081,0,s7_stable,75.1678,4.0000,13.0000,94.0000,1.0000,22.0000,185.0000,1.0000,9.0000,64.5488,102.3532,37.0000,129.1130,28.0000
+1351611807,0,s7_stable,72.5989,3.0000,7.0000,83.0000,1.0000,12.0000,218.0000,2.0000,5.0000,39.4747,48.7162,13.0000,64.2410,24.0000
+1319582963,0,s7_stable,71.8336,7.0000,14.0000,139.0000,4.0000,14.0000,139.0000,4.0000,8.0000,39.8158,52.7343,17.5000,56.2610,32.0000
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars> C:\tmp\ow\Scripts\python.exe .\tools\selector_probe_4p.py `
+>>   --agent .\sample112_4p_s7_fixed_from110\main.py `
+>>   --seed-list '25179495,2087250483,666643609' `
+>>   --csv `
+>>   --quiet-env-noise
+seed,seat,mode,enemy_dist,n25_count,n25_prod,n25_ships,n25_cheap,n45_prod,n45_ships,n45_cheap,n65_high_prod,chain_score,outer_anchor_score,support_density,enemy_cluster_risk,planet_count
+25179495,0,s7_stable,70.8617,3.0000,11.0000,129.0000,0.0000,17.0000,201.0000,0.0000,9.0000,54.3874,72.9484,13.5000,87.4130,20.0000
+2087250483,0,s7_stable,68.4140,3.0000,5.0000,92.0000,2.0000,20.0000,237.0000,4.0000,6.0000,53.6520,62.3234,11.5000,96.6730,28.0000
+666643609,0,s7_stable,84.6378,4.0000,10.0000,171.0000,0.0000,17.0000,197.0000,2.0000,4.0000,56.9153,73.4606,19.5000,83.0160,28.0000
+PS C:\Users\yuu98\Desktop\kaggle\orbit-wars>

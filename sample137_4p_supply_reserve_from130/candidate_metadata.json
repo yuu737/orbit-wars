@@ -1,0 +1,15 @@
+{
+  "candidate_id": "sample137_4p_supply_reserve_from130",
+  "parent": "sample130_4p_threat_reserve_from110",
+  "goal": "Idea B (supply analysis): extend the source reserve to account for LATENT reachable enemy garrisons (strongest single enemy that could launch and reach an owned planet within the horizon), combined with the in-flight term via MAX, to stop source-stripping deaths.",
+  "change": [
+    "_threat_reserve_source_budget now also computes a latent reachable-enemy threat from cross_dist + enemy fleet speed, and reserves against max(in-flight, latent).",
+    "Combat-aware (strongest single enemy, not sum) to avoid over-reserve; savable-gated; 4P only; 2P untouched."
+  ],
+  "config": {"supply_latent_frac": 0.5, "supply_latent_horizon": 16.0},
+  "baseline_reference": {
+    "fixed_30_seed": "sample130: 16W/14L, placement 1.47, diff +46.00, crash 0%.",
+    "random20": "sample130: 7W/13L, placement 1.65, diff -540.65, crash 0%."
+  },
+  "trace_note": "seed 1399615834 (symmetric 4-way brawl): held ships at t36 but still lost all planets by t44; single-seed inconclusive, judged on aggregate."
+}

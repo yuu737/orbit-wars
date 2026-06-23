@@ -1,0 +1,14 @@
+{
+  "candidate_id": "sample132_4p_combat_aware_reserve_from130",
+  "parent": "sample130_4p_threat_reserve_from110",
+  "goal": "Make the sample130 threat reserve combat-aware: multiple enemy owners arriving at the same planet fight each other first, so reserve against (top1_enemy - top2_enemy) instead of the sum. Reduces over-reservation / passivity in 4P brawls without lowering safety vs a single attacker.",
+  "change": [
+    "In _threat_reserve_source_budget, enemy threat per planet changed from sum of all enemy arrivals to net surviving hostile force = top1_enemy_owner - top2_enemy_owner over the window.",
+    "Single inbound enemy: unchanged (top2=0). Multiple enemies: relaxed because they cancel. Still a hard source-budget constraint."
+  ],
+  "baseline_reference": {
+    "fixed_30_seed": "sample130: 16W/14L, placement 1.47, diff +46.00, crash 0%.",
+    "random20": "sample130: 7W/13L, placement 1.65, diff -540.65, crash 0%."
+  },
+  "note": "Smoke on seeds 1657384936,53351919 is identical to sample130 (no multi-enemy arrival there); the effect only shows on brawl boards."
+}
