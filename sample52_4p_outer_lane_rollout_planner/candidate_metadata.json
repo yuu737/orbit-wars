@@ -1,0 +1,15 @@
+{
+  "candidate_id": "sample52_4p_outer_lane_rollout_planner",
+  "parent": "sample51_4p_outer_lane_sequence_planner",
+  "goal": "Compare several outer-lane action sequences with a cheap 20-60 turn rollout, then reserve budget for the best queue.",
+  "main_idea": "Generate multiple lane candidates, estimate capture order / enemy contest / compounding production, choose the strongest rollout lane, and prioritize its first queue targets before normal greedy selection.",
+  "modes": [
+    "s7_stable",
+    "s8_burst",
+    "lane_anchor",
+    "domain_factory",
+    "winner_outer_domain",
+    "enemy_domain_block"
+  ],
+  "notes": "Inspired by rolling-horizon / forward-planning ideas: do not globally prefer outer planets; choose one concrete action sequence and make the scorer serve that strategy."
+}

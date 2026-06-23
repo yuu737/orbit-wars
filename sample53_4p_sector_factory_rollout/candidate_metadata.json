@@ -1,0 +1,15 @@
+{
+  "candidate_id": "sample53_4p_sector_factory_rollout",
+  "parent": "sample52_4p_outer_lane_rollout_planner",
+  "goal": "Choose an outer sector that can become our own factory, prioritizing safe support chains before heavy anchors.",
+  "main_idea": "Penalize contested heavy-anchor rushes, reward support-before-anchor density and enemy-distance margin, then let the rollout queue build cheap support -> anchor -> expansion.",
+  "modes": [
+    "s7_stable",
+    "s8_burst",
+    "lane_anchor",
+    "domain_factory",
+    "winner_outer_domain",
+    "enemy_domain_block"
+  ],
+  "notes": "This branch intentionally changes the lane-choice objective: heavy anchors are expansion rewards, not the first goal, unless the lane already has enough safe support."
+}

@@ -1,0 +1,15 @@
+{
+  "candidate_id": "sample54_4p_queue_executor",
+  "parent": "sample52_4p_outer_lane_rollout_planner",
+  "goal": "Execute the first outer-lane support targets with capture-floor sized launch candidates instead of relying only on score bonuses.",
+  "main_idea": "Keep the support-first sector factory planner, then add explicit queue candidates sized from capture_floor for the first 1-2 lane targets.",
+  "modes": [
+    "s7_stable",
+    "s8_burst",
+    "lane_anchor",
+    "domain_factory",
+    "winner_outer_domain",
+    "enemy_domain_block"
+  ],
+  "notes": "This branch tests whether the planned support queue needs explicit capture-floor launch candidates. It preserves the fixed-pool win count but has not solved the hard loss set yet."
+}

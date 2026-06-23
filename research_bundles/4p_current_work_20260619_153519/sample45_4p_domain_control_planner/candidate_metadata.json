@@ -1,0 +1,43 @@
+{
+  "candidate_id": "sample45_4p_domain_control_planner",
+  "parent": "sample44_4p_script_portfolio_planner",
+  "source_parts": [
+    "sample36 stable/s8/lane selector",
+    "sample43 winner_path component",
+    "stateful outer domain factory planner"
+  ],
+  "goal": "4P bot that builds an outer production factory and plays for first place",
+  "modes": [
+    "s7_stable",
+    "s8_burst",
+    "lane_anchor",
+    "domain_factory",
+    "winner_outer_domain",
+    "enemy_domain_block"
+  ],
+    "notes": "Single-package 4P selector. domain_factory stores anchor/core/support/expansion as a stateful plan. In v1 it is layered conservatively onto winner_outer_domain after the early claim phase so the known winner path is not blocked.",
+  "latest_local_result": {
+    "date": "2026-06-19",
+    "pool": "sample7 + sample8 + hairate5, seat0, 15 fixed seeds",
+    "seeds": [
+      2000000,
+      2000001,
+      2000002,
+      5421622,
+      5421623,
+      5421624,
+      56000000,
+      56000001,
+      56000002,
+      9874600000,
+      9874600001,
+      9874600002,
+      12000000,
+      12000001,
+      12000002
+    ],
+    "result": "11W / 0D / 4L, avg place 1.27, avg diff +2857.80",
+    "baseline_reference": "sample44 reached 11W / 0D / 4L on this pool",
+    "interpretation": "Research branch: preserves sample44's win count while adding a midgame outer-factory layer to winner_outer_domain. Forcing chain-cluster losses into domain_factory was tested and reverted because it hurt 5421622."
+  }
+}

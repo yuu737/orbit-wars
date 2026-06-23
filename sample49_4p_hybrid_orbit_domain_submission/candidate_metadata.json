@@ -1,0 +1,23 @@
+{
+  "candidate_id": "sample49_4p_hybrid_orbit_domain",
+  "parent": "sample48_4p_sample_opening_domain_factory",
+  "goal": "Combine Planet Wars fast-forward style scoring, Halite II outer-lane FFA heuristics, and the existing sample48 domain-factory branch without replacing the stable sample opening.",
+  "main_idea": "Keep sample48 mode selector and opening. After exact flow scoring, apply a 4P meta scoring layer before greedy assignment: avoid early center brawls, prefer outer production lanes, discount targets already covered by friendly fleets, penalize overkill, and reduce highly contestable neutral grabs.",
+  "modes": [
+    "s7_stable",
+    "s8_burst",
+    "lane_anchor",
+    "domain_factory",
+    "winner_outer_domain",
+    "enemy_domain_block"
+  ],
+  "new_in_sample49": [
+    "_apply_hybrid_4p_meta_adjustment() inserted before _greedy_select()",
+    "_own_incoming_ship_credit() approximates already-heading friendly fleets from fleet direction",
+    "soft center penalty for early 4P neutral/enemy attacks",
+    "soft outer-radius and production bonus for neutral lane expansion",
+    "overkill and already-covered target penalties using capture_floor at candidate ETA",
+    "enemy pressure penalty for poison neutral captures"
+  ],
+  "submission_note": "Research candidate. py_compile and synthetic smoke test pass; local Kaggle evaluation was not run in this environment because kaggle_environments is unavailable."
+}

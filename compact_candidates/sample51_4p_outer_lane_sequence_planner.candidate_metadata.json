@@ -1,0 +1,15 @@
+{
+  "candidate_id": "sample51_4p_outer_lane_sequence_planner",
+  "parent": "sample48_4p_sample_opening_domain_factory",
+  "goal": "Commit to one outer lane from the opening, claim/support it, then mature it into an outer production factory for 1st-place wins.",
+  "main_idea": "Add a stateful outer-lane sequence plan above the sample-style scorer: claim nearby lane planets, consolidate anchor/support, then project from the matured lane instead of applying only broad score bonuses. Lane modes now reserve one or two greedy budget waves before normal greedy selection.",
+  "modes": [
+    "s7_stable",
+    "s8_burst",
+    "lane_anchor",
+    "domain_factory",
+    "winner_outer_domain",
+    "enemy_domain_block"
+  ],
+  "notes": "This branch intentionally moves beyond safe global center/outer tweaks. It keeps the exact scorer for launch sizing, but makes the strategic target stream stateful from the opening and prevents normal greedy selection from consuming all lane-source budget first."
+}

@@ -1,0 +1,15 @@
+{
+  "candidate_id": "sample48_4p_sample_opening_domain_factory",
+  "parent": "sample45_4p_domain_control_planner",
+  "goal": "Use proven sample-style opening, then switch into a stronger outer-domain factory plan after the first expansion phase.",
+  "main_idea": "Do not force domain_factory from step 0. Let sample7-style opening capture early planets, then build and thicken an outer production domain from step 62 onward.",
+  "modes": [
+    "s7_stable",
+    "s8_burst",
+    "lane_anchor",
+    "domain_factory",
+    "winner_outer_domain",
+    "enemy_domain_block"
+  ],
+  "notes": "This branch responds to the finding that aggressive custom opening arrows were firing but failing to capture. It preserves sample opening reliability while keeping the long-term domain-control strategy."
+}

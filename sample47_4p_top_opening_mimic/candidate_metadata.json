@@ -1,0 +1,46 @@
+{
+  "candidate_id": "sample47_4p_top_opening_mimic",
+  "parent": "sample46_4p_full_domain_factory",
+  "source_parts": [
+    "sample36 stable/s8/lane selector",
+    "sample43 winner_path component",
+    "stateful outer domain factory planner",
+    "domain-first mode selection",
+    "domain regroup pressure",
+    "top-player style claim-then-thicken opening"
+  ],
+  "goal": "Mimic top-player 4P openings: claim a connected lane first, then thicken it into an outer factory",
+  "modes": [
+    "s7_stable",
+    "s8_burst",
+    "lane_anchor",
+    "domain_factory",
+    "winner_outer_domain",
+    "enemy_domain_block"
+  ],
+  "notes": "Research branch. Claim phase avoids early holding/regroup and prioritizes nearby lane planets. Consolidation and projection start after the lane exists.",
+  "latest_local_result": {
+    "date": "2026-06-19",
+    "pool": "sample7 + sample8 + hairate5, seat0, 15 fixed seeds",
+    "seeds": [
+      2000000,
+      2000001,
+      2000002,
+      5421622,
+      5421623,
+      5421624,
+      56000000,
+      56000001,
+      56000002,
+      9874600000,
+      9874600001,
+      9874600002,
+      12000000,
+      12000001,
+      12000002
+    ],
+    "result": "pending",
+    "baseline_reference": "sample44/sample45 reached 11W / 0D / 4L on this pool",
+    "interpretation": "Deliberately aggressive research branch. Do not judge only by first smoke result; inspect whether it creates connected, thick outer domains."
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "candidate_id": "sample50_4p_halite_pw_adapted",
+  "parent": "sample48_4p_sample_opening_domain_factory",
+  "goal": "Adapt Planet Wars / Halite-style 4P heuristics to Orbit Wars without directly copying external code.",
+  "main_idea": "Keep the current sample/domain planner, then add 4P shape control: prefer outer planets, penalize center fights, and reduce attacks into enemy pressure.",
+  "borrowed_concepts": [
+    "Halite II style outer control in 4P",
+    "Planet Wars style production-aware expansion",
+    "Avoid over-fighting central contested planets"
+  ],
+  "implementation_notes": [
+    "Adds _apply_halite_4p_shape_adjustment after existing candidate scoring layers.",
+    "No external source code is copied; ideas are reimplemented in the local tensor planner.",
+    "This is a research branch, not yet a stable submission candidate."
+  ]
+}
