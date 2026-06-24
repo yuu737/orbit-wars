@@ -2324,3 +2324,791 @@ Summary of the whole 4P micro campaign (sample131-137, seven straight non-improv
 - CONCLUSION: stop 4P bolt-on micro. The only remaining 4P upside is a STRUCTURAL rewrite (Idea A: replace the per-wave greedy `_greedy_select` with a global min-cost-flow / assignment allocation), which is a large, higher-risk, multi-step project (and must be hand-rolled in torch/numpy since scipy is not in the submission env). Alternatively, pivot to the untouched 2P axis (Ideas I/J) for fresher, lower-risk gains.
 
 CONFIRMED DELIVERABLE: `sample130_4p_threat_reserve_from110` is the validated improved 4P base (13->16W 30-seed, 6->7W random20, placement+diff up, crash 0%, 2P untouched, flat-submittable). sample131/133/134/135/136/137 rejected; sample132 shelved (neutral, more-correct threat model).
+
+## 2026-06-23 sample144-149: 2P config-baked experiments from sample130
+
+Critical trap found before this batch:
+- `evaluate.py` and the trace tools execute agents through `kaggle_environments.make().run([path])`.
+- In that raw-agent path, `__file__` can be undefined. Then `_HERE` falls back to `os.getcwd()` (project root), so the sample-local `params.json` is not found.
+- Result: any feature enabled only through `params.json` may be silently disabled. The observed real 2P config was the dataclass default (`max_waves_per_turn=7`, `size_multipliers=(0.5, 0.75, 1.0)`), not the `params.json` override.
+- This explains why `sample142` looked like a WASH: `enable_global_select_2p` was never actually enabled under the harness. The earlier "safe_drain redundancy" explanation is superseded.
+
+Fix policy for this batch:
+- Keep `sample130_4p_threat_reserve_from110` as the base.
+- Do not depend on `params.json` for experimental flags.
+- Bake the 2P experiment flags into the `CONFIG_2P` base in code.
+- Also update `params.json` to match, so import-style debugging and raw-exec evaluation do not disagree.
+- Keep baseline-equivalent fields untouched in code (do not bake max_waves/size_multipliers), so the experiment isolates the new 2P lever.
+
+Artifacts created:
+- `sample144_2p_global_baked_from142`
+  - Parent: `sample142_2p_globalselect_from130`
+  - Code-baked `enable_global_select_2p=True`
+  - Parameters: `vuln_weight=1.0`, `margin=2.0`, `drop_sweeps=3`, `drop_deadband=0.0`
+- `sample145_2p_global_soft_from142`
+  - Softer global-select
+  - Parameters: `vuln_weight=0.6`, `margin=1.0`, `drop_sweeps=2`, `drop_deadband=0.25`
+- `sample146_2p_global_strong_from142`
+  - Stronger global-select
+  - Parameters: `vuln_weight=1.45`, `margin=3.0`, `drop_sweeps=4`, `drop_deadband=0.0`
+- `sample143_2p_oneply_hardbad_from130`
+  - Already code-baked before this batch
+  - Parameters: `start=34`, `hard_bad_net=-42`, `recapture_ratio=1.25`, `recapture_net=-12`
+- `sample147_2p_oneply_hardbad_late_from143`
+  - Later/saner one-ply hard-bad filter
+  - Parameters: `start=55`, `hard_bad_net=-42`, `recapture_ratio=1.25`, `recapture_net=-12`
+- `sample148_2p_oneply_hardbad_strict_from143`
+  - Stricter one-ply hard-bad filter
+  - Parameters: `start=34`, `hard_bad_net=-55`, `recapture_ratio=1.4`, `recapture_net=-18`
+- `sample149_2p_global_soft_oneply_from142`
+  - Combined candidate: soft global-select plus standard one-ply hard-bad
+  - Parameters: global soft (`0.6/1.0/2/0.25`) + one-ply standard (`34/-42/1.25/-12`)
+
+Verification:
+- `py_compile`: PASS for `sample144` through `sample149`.
+- Import-style config check: PASS; each sample reports the intended `CONFIG_2P` values.
+- Runtime smoke: `sample149` vs `sample8`, seed `24790546`, crash `0.0%` (lost; not used for adoption judgment).
+
+Suggested eval command:
+
+```powershell
+$seeds = '610634183,1429735747,1969037445,42090447,846748796,24790546,832765005,1484716093,104867638,1447505284,1889498543,1070144383,300150186,1133890703,1575637904,613446250,523017703,593770827,1671045763,442193247'
+
+foreach ($agent in @(
+  'sample130_4p_threat_reserve_from110',
+  'sample144_2p_global_baked_from142',
+  'sample145_2p_global_soft_from142',
+  'sample146_2p_global_strong_from142',
+  'sample143_2p_oneply_hardbad_from130',
+  'sample147_2p_oneply_hardbad_late_from143',
+  'sample148_2p_oneply_hardbad_strict_from143',
+  'sample149_2p_global_soft_oneply_from142'
+)) {
+  Write-Host "=== $agent ==="
+  C:\tmp\ow\Scripts\python.exe evaluate.py --players 2 `
+    --agent "$agent\main.py" `
+    --opponent sample8\main.py `
+    --seed-list $seeds `
+    --workers 4 |
+    Select-String 'Wins|Draws|Losses|Crash rate|Average placement|Average score diff|seed='
+}
+```
+
+Decision rule:
+- Win count vs `sample8` is primary.
+- Draw/loss split and survival are secondary.
+- Diff is not the main metric unless win counts tie.
+
+## 2026-06-23 emergency 4P structural sandbox: safe portfolio experiments
+
+User requested a separate safe folder for large 4P structural experiments, explicitly not just coefficient/config tweaking.
+
+Folder:
+- `4p_safe_structural_experiments_20260623/`
+
+Parent:
+- `sample130_4p_threat_reserve_from110`
+
+Artifacts:
+- `4p_safe_structural_experiments_20260623/sample150_4p_safe_portfolio3_from130`
+  - Structural change: enables `top_director` safe-growth logic for all 4P modes.
+  - Structural change: reserved safe-neutral capture before normal greedy is expanded from `W=1` to `W=3`.
+  - Purpose: test whether making safe expansion a real portfolio slot improves territory formation without changing the learned selector.
+- `4p_safe_structural_experiments_20260623/sample151_4p_neutral_first_portfolio_from130`
+  - Builds on sample150.
+  - Structural change: if early safe-neutral reservations exist, the remaining opening greedy pass suppresses non-essential enemy attacks until turn 72.
+  - Very cheap vulture enemy captures are still allowed.
+  - Purpose: test a stronger "form territory first, fight later" executor without blanket no-enemy-attack.
+- `4p_safe_structural_experiments_20260623/sample152_4p_top_director_portfolio_from130`
+  - Builds on sample150.
+  - Structural change: replaces the learned 4P mode selector with `top_director` fixed for all 4P seeds.
+  - Purpose: test whether consistent portfolio execution beats seed-shaped selector logic.
+
+Verification:
+- `py_compile`: PASS for sample150-152.
+
+Suggested quick eval:
+
+```powershell
+$seeds = 1..8 | ForEach-Object { Get-Random -Minimum 1 -Maximum 2147483647 }
+$seedCsv = $seeds -join ','
+Write-Host "=== seeds ==="
+Write-Host $seedCsv
+
+foreach ($agent in @(
+  'sample130_4p_threat_reserve_from110',
+  '4p_safe_structural_experiments_20260623\sample150_4p_safe_portfolio3_from130',
+  '4p_safe_structural_experiments_20260623\sample151_4p_neutral_first_portfolio_from130',
+  '4p_safe_structural_experiments_20260623\sample152_4p_top_director_portfolio_from130'
+)) {
+  Write-Host "=== $agent ==="
+  C:\tmp\ow\Scripts\python.exe evaluate.py --players 4 `
+    --agent "$agent\main.py" `
+    --opponent sample7\main.py `
+    --opponent sample8\main.py `
+    --opponent bots\hairate5.py `
+    --seed-list $seedCsv `
+    --workers 4 |
+    Select-String 'Wins|Draws|Losses|Crash rate|Average placement|Average score diff|seed='
+}
+```
+
+Read:
+- sample150 tests action-slot decomposition only.
+- sample151 tests strong early territory formation.
+- sample152 tests abandoning selector complexity.
+- These are intentionally allowed to break known-seed behavior if they reveal a new 4P direction.
+
+## 2026-06-23 2P durable-capture filter A
+
+Context:
+- `sample130` and `sample8` were found to be effectively identical in the real `evaluate.py` raw-agent path for tested 2P traces.
+- The earlier `sample144` global-select experiment was strong inside the experimental league but lost clearly to true `sample8`, so it is not a final 2P direction.
+- New priority A is to address the real suspected failure mode: capture churn where ship-net is not terrible, but the captured planet cannot be held.
+
+Artifact:
+- `sample153_2p_durable_capture_from130`
+
+Parent:
+- `sample130_4p_threat_reserve_from110`
+
+Implementation:
+- Added a 2P-only `_apply_durable_capture_filter_2p`.
+- It runs after score adjustments and before `_greedy_select`.
+- It affects only offensive capture candidates (`not cand_is_def`), not reinforcement/defense/regroup.
+- It does not add bonuses or reorder durable candidates; it only sets non-durable capture scores to `-inf`.
+- Durability test:
+  - `post_cap = send - floor_at_eta`
+  - `defense_capacity = post_cap + production * durable_hold_window`
+  - subtract enemy in-flight arrivals to the target after capture
+  - subtract latent recapture threat from the nearest/top enemy garrisons that can reach within `eta + durable_hold_window`
+  - keep only if future hold margin is at least `durable_margin`
+- Baked config in code, not `params.json`, because raw Kaggle/evaluate execution may not define `__file__` and can silently ignore `params.json`.
+
+Initial baked params:
+- `enable_durable_capture_2p=True`
+- `durable_hold_window=7`
+- `durable_margin=2.0`
+- `durable_enemy_frac=0.70`
+- `durable_latent_top_k=2`
+- `durable_start_turn=0`
+- `durable_turn_limit=420`
+
+Verification:
+- `py_compile`: PASS
+
+Smoke vs `sample8` on known churn/loss seeds:
+
+```text
+sample153 vs sample8 seeds 24790546,1969037445,1575637904
+Wins: 0
+Losses: 3
+Crash rate: 0.0%
+Average score diff: -1371.67
+
+sample130 baseline on same seeds
+Wins: 0
+Losses: 3
+Crash rate: 0.0%
+Average score diff: -1510.00
+```
+
+Read:
+- A v1 did not flip the three known 2P losses to wins, but it did not crash and slightly improved diff on that tiny smoke set.
+- This is not yet proof of value. Next useful tests are small direct A/B vs `sample8`, then parameter variants if it is too weak/too passive.
+
+Follow-up random eval supplied by user:
+
+```text
+random20, same seeds, vs sample8
+sample130: 5W/3D/12L, Avg diff -1183.50, Avg placement 1.60
+sample153: 10W/1D/9L, Avg diff +486.15, Avg placement 1.45
+
+random40, same seeds, vs sample8
+sample130: 15W/7D/18L, Avg diff -212.25, Avg placement 1.45
+sample153: 16W/2D/22L, Avg diff -376.35, Avg placement 1.55
+```
+
+Interpretation:
+- `sample153` clearly changes behavior and can convert some losses to wins.
+- The random40 result is mixed: wins +1 but draws collapse into losses and placement/diff get worse.
+- Likely issue: filtering all captures also blocks neutral growth and safe expansion, not just bad enemy recapture churn.
+
+New variants:
+- `sample154_2p_durable_enemy_only_from153`
+  - Same as sample153, but durable filter applies only to enemy-planet captures.
+  - Neutral captures are left untouched.
+  - Purpose: keep the loss-rescue effect while avoiding damage to neutral expansion.
+- `sample155_2p_durable_enemy_late_soft_from153`
+  - Enemy-planet captures only.
+  - Softer baked params: `hold_window=6`, `margin=1.0`, `enemy_frac=0.55`, `latent_top_k=1`, `start_turn=35`.
+  - Purpose: reduce early/opening disruption and avoid turning draws into losses.
+
+Verification:
+- `py_compile`: PASS for sample154 and sample155.
+
+Suggested comparison:
+
+```powershell
+$seedList = 1..40 | ForEach-Object { Get-Random -Minimum 1 -Maximum 2147483647 }
+$seedCsv = $seedList -join ','
+Write-Host "=== random40 seeds ==="
+Write-Host $seedCsv
+
+foreach ($agent in @(
+  'sample130_4p_threat_reserve_from110',
+  'sample153_2p_durable_capture_from130',
+  'sample154_2p_durable_enemy_only_from153',
+  'sample155_2p_durable_enemy_late_soft_from153'
+)) {
+  Write-Host "=== $agent vs sample8 ==="
+  C:\tmp\ow\Scripts\python.exe evaluate.py --players 2 `
+    --agent "$agent\main.py" `
+    --opponent sample8\main.py `
+    --seed-list $seedCsv `
+    --workers 4 |
+    Select-String 'Wins|Draws|Losses|Crash rate|Average placement|Average score diff|seed='
+}
+```
+
+## 2026-06-24 Replay-driven diagnosis + sample157/161/163 (BOTH MODES IMPROVED)
+
+### Methodology finding (critical, applies to everything)
+- `params.json` is **ignored under the eval harness** (`evaluate.py` and `tools/trace_*.py` both use
+  `kaggle_environments.make().run([path])`, which execs the agent with `__file__` UNSET → `_HERE`
+  falls back to cwd (project root) → `params.json` not found → `_OW_STRATEGY_PARAMS={}` → dataclass
+  defaults). Confirmed by debug: `_HERE`=project root, `pj_exists=False`, runtime `max_waves=7`,
+  `size_multipliers=(0.5,0.75,1.0)`.
+- Consequence: ALL prior 2P `params.json` config and any flag enabled via params.json (e.g. sample142
+  `enable_global_select_2p`) was **never active**. That is the real reason sample142 was a pure WASH
+  (feature never turned on), not "drop redundant".
+- **Fix going forward: bake config in CODE** (CONFIG_2P / CONFIG_4P), not params.json. NOTE:
+  `import main` (with `__file__` set) DOES load params.json, so config reflection via import is
+  misleading — verify behavior on the eval path (`env.run`).
+
+### Tools added
+- `tools/replay_analyze.py` — analyze one replay JSON (2P & 4P). 4P: all-seat table, elimination
+  order, WHO-TOOK-MY-PLANETS (primary killer), SOURCE-STRIPPING with 3RD-PARTY-STEAL detection.
+  Auto-selects the user's seat by CJK name (藤田　佑). UTF-8 safe.
+- `tools/shadow_compare.py` — form-2 imitation: shadow OUR agent over a top player's replay, diff the
+  per-turn actions (launch count, target-type split, concentration).
+- `tools/trace_2p.py` — per-turn 2P planets/ships/prod trace.
+
+### 4P diagnosis (real replays `replays_my_4p/`, 13 of the user's losses vs top players)
+- True 4P loss = **THIRD-PARTY source-stripping**: we drain a planet to attack opponent A and a
+  DIFFERENT opponent B takes the bared planet. SOURCE-STRIPPING in all 13 games; drill of 81431550
+  showed **43 strips, 27 (63%) third-party steals**. Often die 1st/2nd; two neighbours carve up the
+  leader. IMPROVEMENT_PLAN root cause, now quantified on real data.
+
+### sample157_4p_thirdparty_guard_from110 — ADOPTED (4P)
+- New `_thirdparty_threat_4p` (per owned planet, MAX over single opponents of latent reach within
+  `horizon`=10 + in-flight within `window`=10) + `_global_select_4p` (greedy == `_greedy_select`,
+  then a drop-sweep removing marginal waves that bare a *holdable* planet below that threat). Hard
+  source-side constraint, threat-triggered, savable-gated, drop-only → §1.1 compliant. Baked in
+  CONFIG_4P (margin=3, λ=1, sweeps=3, start=20, limit=250). `player_count>=4` gated → 2P byte-identical;
+  orbit_lite untouched. (Note: subsumes 110's would-be threat_reserve = in-flight + latent.)
+- Eval vs `sample7+sample8+hairate5`, seat0:
+  - fixed15: sample110 7W/1D/7L place1.47 → **sample157 10W/1D/4L place1.27** (diff +160 → +1022)
+  - random20: sample110 6W/1D/13L place1.70 → **sample157 11W/1D/8L place1.40** (diff −990 → +110)
+  - crash 0%, survival ~equal (wins up = not passivity). Combined 35 games 13W → 21W (+8W).
+
+### Guard tuning EXHAUSTED — sample158 / sample160 REJECTED
+- `sample158_4p_tpguard_vuln16_from157` (λ 1.0→1.6): random20 5W/14L, fixed15 4W/10L — **below
+  baseline** = passivity collapse. λ=1.0 is a knife-edge; cannot strengthen.
+- `sample160_4p_tpguard_targetaware_from157` (v2: threat EXCLUDES the attacked opponent + per-wave
+  own-source attribution): reduced strips on 2 seeds (one loss→win) but on full random20 went 11→8W
+  (fixed15 same) = **net worse, REJECTED**. v1 (global per-planet, max over all opponents, λ=1.0) is
+  the sweet spot. **4P guard is done at sample157.**
+
+### 2P diagnosis (real replays `replays_my/`, 11 losses + top replays)
+- 2P loss = **production race at EQUAL ships** (9/11 losses: ship gap ±0–7% at divergence, fewer
+  planets → production complex). NOT source-stripping. Divergence turn t17–t115.
+- P1 hypothesis (high-prod neutrals missing from shortlist) **REFUTED by trace** (reachable high-prod
+  neutrals are in the shortlist; consumed symmetrically by ~t39). Avoided another wrong impl.
+- `shadow_compare` on 4 top winners (Roman Nesterov / CPMP): the consistent gap is **top players
+  launch 2–4x more often = far more active; our agent is comparatively passive (too few launches)**.
+
+### sample161_2p_active_from8 — ADOPTED candidate (2P)
+- More-active 2P: `roi_threshold 1.5→0.9`, `max_waves_per_turn 7→12`, baked in CONFIG_2P (code).
+  Asymmetric edge vs the low-activity sample8 baseline.
+- random40 vs sample8: **24W/3D/13L (60%)** vs sample8×sample8 mirror baseline **16W/8D/16L (40%)**
+  on the same seeds = +8W, a real (non-seat-bias) win. First 2P lever that beats sample8 (all prior
+  global-select / one-ply-hardbad / durable-capture attempts were net-zero or worse).
+- `sample162_2p_hyperactive_from8` (roi0.4/waves18): **identical** result to 161 → the activity gain
+  **saturates at roi0.9/waves12**; keep the milder 161. (Still needs a 2nd random40 confirmation.)
+
+### sample163_submit_4pguard_2pactive — SUBMISSION MERGE
+- = sample157 (4P guard) with sample161's 2P activity added to CONFIG_2P. main.py byte-identical to
+  sample157 except the CONFIG_2P block (byte-identical to sample161). orbit_lite untouched. → 4P =
+  validated sample157, 2P = validated sample161.
+- Built `sample163_submit_4pguard_2pactive_submit_flat.zip`: FLAT (main.py + orbit_lite/*.py, no nested
+  dir, no `__pycache__`). **params.json deliberately EXCLUDED** so the code-baked CONFIG always applies
+  regardless of whether the comp env reads params.json (guarantees submission == validated eval).
+
+### Open items
+- 2P sample161: run a 2nd random40 vs sample8 (+ mirror baseline) to confirm 60% reproduces before
+  final adoption. Optionally isolate which knob (roi vs waves) drives the gain.
+- 4P: sample157 done; residual dense-seed losses still strip but cannot be guarded harder (sample158
+  passivity) and target-aware did not help (sample160).
+
+## 2026-06-24 Competition replays -> config is EXHAUSTED -> STRUCTURAL_REDESIGN_PLAN.md
+
+Submitted sample163; pulled back its competition LOSS replays (`replays_my_2p_163`, `replays_my_4p_163`).
+These (vs the real meta) reveal a DIFFERENT picture than the synthetic eval (vs sample7/8/hairate5):
+
+- **2P (real)**: winners launch ~2x more and grab 2-3x more high-prod neutrals. Our planner is capped:
+  eval-path launch count sample8=86, sample161=84, **sample166(roi0.5/waves18/sources18)=66** -> lowering
+  ROI/raising waves does NOT raise activity (saturates/drops). The ~80-launch cap is STRUCTURAL
+  (planner only fires `capture_floor`-clearing waves; winners make many small/probe/chain launches).
+  sample161's earlier "60%" was chaotic-mirror noise (same activity as sample8).
+- **4P (real, 6 losses)**: 2/6 = opening passivity (sit on 1 planet); 4/6 = competitive mid-game (5-8
+  planets) then ONE opponent snowballs to 16-23 and dismantles everyone. We plateau structurally.
+
+Config attempts to fix this all FAILED (decisive):
+- `sample165_4p_active_from157` (whole-game roi0.8/waves12): A/B vs derivatives 9W/place1.55 LOST to
+  sample157 (12W/place1.40). Crude activity over-extends -> source-stripped. REJECTED.
+- `sample166_2p_hyperactive_from8` (roi0.5/waves18/sources18/finer tiers): eval launch count DROPPED
+  to 66 (<sample8's 86) and lost. REJECTED.
+- `sample167_4p_opening_boost_from157` (when owned<=3: roi0.8 + guard OFF): regressed hard
+  (synthetic 10->7W; A/B 3W/place1.85 vs sample157 6W/place1.70). Guard-off opening = reckless. REJECTED.
+
+**Conclusion: config space is exhausted. Passive loses to expanders; config-activity over-extends and
+loses; no sweet spot exists in config. The wall is STRUCTURAL (orbit_lite planner: myopic
+my-net-minus-enemy-net objective + capture_floor gating + single-turn greedy).**
+
+Wrote **`STRUCTURAL_REDESIGN_PLAN.md`** — a self-contained design doc (delegatable to another AI agent)
+to split orbit_lite into 2P/4P and change each planner: Phase 0 split (byte-equivalence), Phase 1
+instrument the planner to confirm the launch-blocker (floor-gating hypothesis), Phase 2 (2P: allow
+sub-floor probe/chain launches + production tie-break), Phase 3 (4P: state-dependent expansion drive +
+1-ply over-extension look-ahead), with regression gates and the params.json/shadow pitfalls documented.
+
+Current best to keep: 4P=sample157 (guard, validated), 2P=baseline (sample8/161 ~ parity). Submission
+candidate = sample163 (already submitted). sample164/165/166/167 all rejected.
+
+## 2026-06-24 Phase 1 instrumentation from structural redesign plan
+
+Context:
+- `STRUCTURAL_REDESIGN_PLAN.md` says config space is exhausted.
+- `sample168_split_from157` completed Phase 0: separate `orbit_lite_2p` / `orbit_lite_4p` packages with byte-equivalent behavior to `sample157`.
+- Next required step is Phase 1: instrument the planner without changing behavior to confirm what blocks launches, especially the 2P floor-gating hypothesis.
+
+Artifact:
+- `sample169_phase1_plan_trace_from168`
+
+Parent:
+- `sample168_split_from157`
+
+Changes:
+- Behavior-changing logic: none intended.
+- Added `OW_PLAN_DBG` JSONL diagnostics.
+- `main.py::_tier_candidates` logs:
+  - `cells`, `reachable`, `aim_viable`, `clears_floor`, `floor_blocked`, `src_eq_tgt`, `source_or_target_missing`, `valid`, `S`, `T`, `K`, `size_mult`, `player_count`.
+- `orbit_lite_2p/planner_core.py::_greedy_select` and `orbit_lite_4p/planner_core.py::_greedy_select` log:
+  - stop event reason: `roi`, `no_candidate`, or `max_waves`
+  - wave index, fired count, finite score count, valid-after-mask count
+  - blockers: taken target, budget, target-used-as-source, contributor-defended.
+
+Verification:
+- `py_compile`: PASS for `main.py`, `orbit_lite_2p/planner_core.py`, `orbit_lite_4p/planner_core.py`.
+- Smoke command created `phase1_plan_dbg_2p_seed24790546.jsonl` with both `tier_candidates` and `greedy_stop` records.
+- Example early signal on seed `24790546`: many turns have hundreds of cells but only 0-3 finite/valid candidates after gating, and greedy often stops by `roi` or `no_candidate`. This supports doing proper aggregate Phase 1 analysis before any Phase 2 code change.
+
+Usage:
+
+```powershell
+$log = Join-Path (Get-Location) 'phase1_plan_dbg_2p_random.jsonl'
+if (Test-Path $log) { Remove-Item $log }
+$env:OW_PLAN_DBG = $log
+C:\tmp\ow\Scripts\python.exe evaluate.py --players 2 `
+  --agent sample169_phase1_plan_trace_from168\main.py `
+  --opponent sample8\main.py `
+  --seed-list 24790546,1969037445,1575637904 `
+  --workers 1 |
+  Select-String 'Wins|Draws|Losses|Crash rate|Average placement|Average score diff|seed='
+Remove-Item Env:OW_PLAN_DBG
+Get-Content $log | Select-Object -First 20
+```
+
+Important:
+- Use `--workers 1` when collecting diagnostics into one file to avoid interleaved writes.
+- The OpenSpiel noise is environment noise; it does not indicate an Orbit Wars crash.
+
+## 2026-06-24 Phase 1 aggregate result and 4P-priority pivot
+
+Context:
+- User ran `sample169_phase1_plan_trace_from168` as a Phase 1 diagnostic run. The match result itself was bad (`0W/3L` in the pasted result), but this was acceptable because `sample169` is instrumentation-only and was not intended as a strength candidate.
+- The purpose was to confirm where the planner stops launches, not to win.
+
+Log files observed:
+- `phase1_plan_dbg_2p.jsonl` (larger/main diagnostic log)
+- `phase1_plan_dbg_2p_seed24790546.jsonl` (single-seed check)
+
+Aggregate command used:
+
+```powershell
+@'
+import json
+from collections import Counter, defaultdict
+
+path = r"phase1_plan_dbg_2p.jsonl"
+
+cnt = Counter()
+sumv = defaultdict(float)
+
+with open(path, encoding="utf-8") as f:
+    for line in f:
+        r = json.loads(line)
+        ev = r.get("event")
+        cnt[ev] += 1
+        if ev == "tier_candidates":
+            for k in ["cells","reachable","aim_viable","clears_floor","floor_blocked","valid"]:
+                sumv[k] += float(r.get(k, 0))
+        elif ev == "greedy_stop":
+            cnt["stop_" + str(r.get("reason"))] += 1
+            sumv["fired"] += float(r.get("fired", 0))
+            sumv["finite"] += float(r.get("finite", 0))
+            sumv["valid_after_mask"] += float(r.get("valid_after_mask", 0))
+
+print("events:", dict(cnt))
+tc = max(cnt["tier_candidates"], 1)
+gs = max(cnt["greedy_stop"], 1)
+print("tier avg:")
+for k in ["cells","reachable","aim_viable","clears_floor","floor_blocked","valid"]:
+    print(f"  {k}: {sumv[k]/tc:.2f}")
+print("greedy avg:")
+for k in ["fired","finite","valid_after_mask"]:
+    print(f"  {k}: {sumv[k]/gs:.2f}")
+print("floor_blocked / aim_viable:", sumv["floor_blocked"] / max(sumv["aim_viable"], 1))
+print("valid / cells:", sumv["valid"] / max(sumv["cells"], 1))
+'@ | C:\tmp\ow\Scripts\python.exe -
+```
+
+Aggregate result:
+
+```text
+events: {'tier_candidates': 1242, 'greedy_stop': 414, 'stop_no_candidate': 88, 'stop_roi': 326}
+tier avg:
+  cells: 192.00
+  reachable: 64.38
+  aim_viable: 54.10
+  clears_floor: 36.22
+  floor_blocked: 40.32
+  valid: 4.80
+greedy avg:
+  fired: 0.43
+  finite: 14.40
+  valid_after_mask: 11.08
+floor_blocked / aim_viable: 0.7452042562690676
+valid / cells: 0.02499748389694042
+```
+
+Interpretation:
+- Candidate grid is large (`cells` avg 192), and many candidates are physically aimable (`aim_viable` avg 54.10).
+- However, `floor_blocked / aim_viable = 0.745`, meaning roughly 74.5% of aimable candidates are rejected by capture-floor gating.
+- Only about 2.5% of all candidate cells remain valid (`valid / cells = 0.025`).
+- Greedy fires only `0.43` waves per stop event on average.
+- Stop reasons are mostly `roi` (`326`) and some `no_candidate` (`88`).
+- This strongly supports the structural diagnosis for 2P: launch count is capped by floor-gating plus ROI, not by simple config values such as max waves.
+
+Design implication:
+- Phase2A remains justified for 2P: allow limited sub-floor launches only when they are productive setup/probe/chain launches.
+- Initial safe shape should be narrow:
+  - 2P only
+  - neutral targets only
+  - high production targets first (`prod >= 3`)
+  - sub-floor but meaningful send, e.g. `send >= floor * 0.45..0.70`
+  - source must remain safe after drain
+  - score as forward deployment / chain setup, not immediate capture
+  - at most 1-2 such launches per turn initially
+
+User priority update:
+- Although Phase2A has enough diagnostic support, the user explicitly prefers prioritizing 4P now.
+- Continue according to `STRUCTURAL_REDESIGN_PLAN.md`, but focus on Phase3A/3B first:
+  - Phase3A: state-dependent expansion drive
+  - Phase3B: overextension / holdability lookahead
+
+Artifacts created after this pivot:
+- `sample170_4p_expansion_drive_from168`
+  - Parent: `sample168_split_from157`
+  - Adds 4P-only state-dependent expansion drive in `main.py`.
+  - Baked into `CONFIG_4P`, not `params.json`.
+  - Intention: when behind in production/planet count, bias candidate scores toward outer/near neutral captures while still letting response gate, mini-rollout, true one-ply, and third-party guard veto bad overextension.
+  - `py_compile`: PASS.
+  - Tiny 4-seed smoke vs `sample7/sample8/hairate5`: `2W/2L`, crash 0. In that small set it matched baseline `sample157` wins but improved average score diff; not enough for adoption.
+- `sample171_4p_expansion_holdcheck_from170`
+  - Parent: `sample170_4p_expansion_drive_from168`
+  - Strengthens expansion drive and adds pre-score holdability/retake-excess penalty.
+  - Intention: keep aggressive expansion pressure, but sink captures whose post-capture garrison + production over a hold window cannot withstand estimated enemy retake pressure.
+  - `py_compile`: PASS.
+
+Next recommended user-run evaluation:
+
+```powershell
+$seedList = 1..20 | ForEach-Object { Get-Random -Minimum 1 -Maximum 2147483647 }
+$seedCsv = $seedList -join ','
+
+Write-Host "=== random20 seeds ==="
+Write-Host $seedCsv
+
+Write-Host "=== baseline sample157 ==="
+C:\tmp\ow\Scripts\python.exe evaluate.py --players 4 `
+  --agent sample157_4p_thirdparty_guard_from110\main.py `
+  --opponent sample7\main.py `
+  --opponent sample8\main.py `
+  --opponent bots\hairate5.py `
+  --seed-list $seedCsv `
+  --workers 4 |
+  Select-String 'Wins|Draws|Losses|Crash rate|Average placement|Average score diff|seed='
+
+Write-Host "=== sample170 expansion drive ==="
+C:\tmp\ow\Scripts\python.exe evaluate.py --players 4 `
+  --agent sample170_4p_expansion_drive_from168\main.py `
+  --opponent sample7\main.py `
+  --opponent sample8\main.py `
+  --opponent bots\hairate5.py `
+  --seed-list $seedCsv `
+  --workers 4 |
+  Select-String 'Wins|Draws|Losses|Crash rate|Average placement|Average score diff|seed='
+
+Write-Host "=== sample171 expansion + holdcheck ==="
+C:\tmp\ow\Scripts\python.exe evaluate.py --players 4 `
+  --agent sample171_4p_expansion_holdcheck_from170\main.py `
+  --opponent sample7\main.py `
+  --opponent sample8\main.py `
+  --opponent bots\hairate5.py `
+  --seed-list $seedCsv `
+  --workers 4 |
+  Select-String 'Wins|Draws|Losses|Crash rate|Average placement|Average score diff|seed='
+```
+
+## 2026-06-24 Phase 3A early 4P results: expansion drive looks promising
+
+User random12 seed pool:
+
+```text
+1589474309,1246569931,807389688,596720771,1956495728,2131017278,1946517415,1495160711,994273260,589627985,1950813941,425913119
+```
+
+Comparison vs `sample7/main.py`, `sample8/main.py`, `bots/hairate5.py`:
+
+```text
+sample157_4p_thirdparty_guard_from110:
+  Wins: 5 (41.7%)
+  Draws: 2 (16.7%)
+  Losses: 5 (41.7%)
+  Crash rate: 0.0%
+  Average score diff: 194.08
+  Average placement: 1.42
+
+sample170_4p_expansion_drive_from168:
+  Wins: 7 (58.3%)
+  Draws: 2 (16.7%)
+  Losses: 3 (25.0%)
+  Crash rate: 0.0%
+  Average score diff: 649.00
+  Average placement: 1.25
+
+sample171_4p_expansion_holdcheck_from170:
+  Wins: 3 (25.0%)
+  Draws: 2 (16.7%)
+  Losses: 7 (58.3%)
+  Crash rate: 0.0%
+  Average score diff: -607.83
+  Average placement: 1.58
+```
+
+Seed-level notes:
+- `sample170` kept every `sample157` win/draw in this pool.
+- `sample170` flipped `1956495728` and `1946517415` from losses to wins.
+- `sample170` still lost `596720771`, `1495160711`, `589627985`.
+- `sample171` regressed several `sample157`/`sample170` wins, so the explicit holdcheck / retake-excess penalty is likely too heavy or miscalibrated.
+
+Separate tiny smoke:
+- `sample172_4p_campaign_value_from171` on 4 older smoke seeds: `1W/3L`, crash 0.
+- Because it inherits the heavy holdcheck from `sample171`, this does not reject campaign value by itself; it mostly confirms the `171` branch is too suppressive.
+
+Current interpretation:
+- Phase3A "state-dependent expansion drive" is the first structural 4P planner change in this series that clearly moved wins in a favorable direction on a fresh pool.
+- The useful part appears to be the simple expansion-drive score bias in `sample170`, not the stronger holdability penalty in `sample171/172`.
+- Continue from `sample170`, not from `sample171`.
+
+New follow-up artifacts:
+- `sample173_4p_campaign_light_from170`
+  - Parent: `sample170_4p_expansion_drive_from168`
+  - Adds a light campaign value only: nearby neutral production/cheap follow-up density around a candidate target.
+  - Does **not** include the heavy holdcheck from `sample171`.
+  - `py_compile`: PASS.
+- `sample174_4p_expansion_drive_strong_from170`
+  - Parent: `sample170_4p_expansion_drive_from168`
+  - No campaign value; simply increases expansion pressure and extends the active window.
+  - `py_compile`: PASS.
+
+Recommended next comparison:
+
+```powershell
+$seedCsv = '1589474309,1246569931,807389688,596720771,1956495728,2131017278,1946517415,1495160711,994273260,589627985,1950813941,425913119'
+
+foreach ($agent in @(
+  'sample157_4p_thirdparty_guard_from110',
+  'sample170_4p_expansion_drive_from168',
+  'sample173_4p_campaign_light_from170',
+  'sample174_4p_expansion_drive_strong_from170'
+)) {
+  Write-Host "=== $agent ==="
+  C:\tmp\ow\Scripts\python.exe evaluate.py --players 4 `
+    --agent "$agent\main.py" `
+    --opponent sample7\main.py `
+    --opponent sample8\main.py `
+    --opponent bots\hairate5.py `
+    --seed-list $seedCsv `
+    --workers 4 |
+    Select-String 'Wins|Draws|Losses|Crash rate|Average placement|Average score diff|seed='
+}
+```
+
+Decision rule for now:
+- If `sample173` or `sample174` beats `sample170` without losing the two rescued seeds, continue from it.
+- If both regress, keep `sample170` as the Phase3A base and test it on larger random pools / derivative-mixed 4P pools.
+
+Follow-up result on the same random12 pool:
+
+```text
+sample173_4p_campaign_light_from170:
+  Wins: 7 (58.3%)
+  Draws: 2 (16.7%)
+  Losses: 3 (25.0%)
+  Crash rate: 0.0%
+  Average score diff: 672.25
+  Average placement: 1.25
+
+sample174_4p_expansion_drive_strong_from170:
+  Wins: 3 (25.0%)
+  Draws: 2 (16.7%)
+  Losses: 7 (58.3%)
+  Crash rate: 0.0%
+  Average score diff: -426.17
+  Average placement: 1.58
+```
+
+Interpretation:
+- `sample173` matches `sample170` on W/D/L and placement while slightly improving average diff (`649.00 -> 672.25`).
+- `sample173` preserves the two important `sample170` rescue wins: `1956495728`, `1946517415`.
+- `sample174` is over-tuned; stronger expansion pressure loses several wins and should be rejected.
+- Current Phase3A best branch: `sample173_4p_campaign_light_from170` by small tiebreak over `sample170`, but treat as tied until larger random pools.
+
+## 2026-06-24 Phase 3B light overextension attempt
+
+User asked what can be done now within `STRUCTURAL_REDESIGN_PLAN.md`, with 4P priority.
+
+Action:
+- Created `sample175_4p_light_overextend_from170`.
+- Parent: `sample170_4p_expansion_drive_from168` because `sample170` is the current promising Phase3A branch.
+
+Design:
+- Implements a light Phase3B-style pre-score overextension lookahead.
+- Unlike `sample171/172`, this is **not** a heavy target holdability filter.
+- It only applies a capped score penalty when an attack/neutral capture candidate leaves its source exposed to estimated third-party pressure.
+- Existing `sample157` third-party guard remains the final hard safety net.
+
+Code-level behavior:
+- Adds config fields:
+  - `enable_light_overextend_4p`
+  - `light_overextend_start`
+  - `light_overextend_limit`
+  - `light_overextend_window`
+  - `light_overextend_margin`
+  - `light_overextend_source_weight`
+  - `light_overextend_target_weight`
+  - `light_overextend_max_penalty`
+- Adds `_apply_light_overextend_4p(...)`.
+- Hook order:
+  - lane/domain/top/influence adjustments
+  - `sample170` expansion drive
+  - **new light overextend score penalty**
+  - response gate / mini rollout / true one-ply
+  - final third-party guard
+
+Verification:
+- `py_compile`: PASS.
+
+Evaluation priority:
+1. Compare `sample170`, `sample173`, `sample174`, `sample175` on the same random12 pool used above.
+2. If `sample175` preserves the two `sample170` rescue wins while improving one of the remaining losses, continue Phase3B from `sample175`.
+3. If it regresses like `sample171`, keep `sample170` as the Phase3A base and treat source-vulnerability pre-score as too redundant with the final guard.
+
+## 2026-06-24 Current stopping point / handoff note
+
+Current 4P development state:
+- Baseline before this phase: `sample157_4p_thirdparty_guard_from110`.
+- Phase3A structural change created:
+  - `sample170_4p_expansion_drive_from168`
+  - Adds state-dependent 4P expansion drive.
+  - Fresh random12 result vs sample7/sample8/hairate5: `7W/2D/3L`, improving over `sample157` (`5W/2D/5L`).
+- Light campaign follow-up:
+  - `sample173_4p_campaign_light_from170`
+  - Adds nearby neutral campaign value on top of `sample170`.
+  - Same random12 result: `7W/2D/3L`, same placement as `sample170`, slightly better avg diff (`672.25` vs `649.00`).
+  - Current most promising branch by small tiebreak, but not yet proven over larger pools.
+
+Rejected / likely rejected branches:
+- `sample171_4p_expansion_holdcheck_from170`
+  - Heavy holdability / retake-excess check.
+  - Same random12: `3W/2D/7L`.
+  - Likely too suppressive.
+- `sample172_4p_campaign_value_from171`
+  - Inherits `sample171` heavy holdcheck, then adds campaign value.
+  - Tiny smoke: `1W/3L`.
+  - Not a clean rejection of campaign idea, but branch should not continue.
+- `sample174_4p_expansion_drive_strong_from170`
+  - Stronger expansion drive.
+  - Same random12: `3W/2D/7L`.
+  - Over-tuned; reject.
+
+Created but not yet evaluated in the random12 comparison:
+- `sample175_4p_light_overextend_from170`
+  - Parent: `sample170`.
+  - Adds light Phase3B source-overextension pre-score penalty.
+  - `py_compile`: PASS.
+  - Needs evaluation against `sample170`/`sample173` on the same seed pool.
+
+Current best candidate to continue from:
+- `sample173_4p_campaign_light_from170` if choosing by current random12 tiebreak.
+- `sample170_4p_expansion_drive_from168` if choosing the simpler, less overfit Phase3A base.
+
+Recommended next step:
+1. Evaluate `sample175` on the same random12 pool:
+   `1589474309,1246569931,807389688,596720771,1956495728,2131017278,1946517415,1495160711,994273260,589627985,1950813941,425913119`
+2. Then run a larger fresh random20/40 comparing:
+   - `sample157_4p_thirdparty_guard_from110`
+   - `sample170_4p_expansion_drive_from168`
+   - `sample173_4p_campaign_light_from170`
+   - `sample175_4p_light_overextend_from170`
+3. If `sample173`/`sample175` do not clearly beat `sample170`, keep `sample170` as the robust structural base.
+
+## 2026-06-24 Phase 3 robustness confirmed -> sample173 is the 4P base; sample175 REJECTED
+
+sample175 on the random12 pool: **6W/2D/4L, place 1.33, +454** — WORSE than sample170/173 (7W/2D/3L)
+and it dropped one of the two rescue seeds (`1946517415`). The light over-extension pre-score is too
+redundant with the final third-party guard (as anticipated). **sample175 REJECTED.**
+
+Fresh random10 (`1486133403,291823361,326967991,2028855203,1273288292,1849613000,1350823488,1895845563,660633770,590490809`),
+overfit check vs sample7/8/hairate5:
+- sample157 (old config-only base): **3W/7L, place 1.70, -1206** (worst)
+- sample170 (expansion drive): 5W/5L, place 1.50, -269
+- **sample173 (170 + light campaign): 7W/3L, place 1.30, +462** (best, separated from 170 here)
+- sample175 (over-extend): 5W/5L, place 1.50, -164
+
+Ordering 173 > 170 > 157 holds on a FRESH pool (and 173 pulls ahead of 170: tied 7-7 on random12, +2W
+here). **The structural redesign (orbit_lite split + Phase3A expansion drive + light campaign) is NOT
+overfit — it robustly beats the config-only ceiling (sample157).** sample157 is now clearly the weakest.
+
+Decisions:
+- **4P base = sample173** (confirmed, robust). Submission `sample176_submit_173_4p_163_2p` = 4P sample173
+  + 2P sample163 (active), flat zip with orbit_lite_2p + orbit_lite_4p (orbit_lite/ and params.json excluded).
+- sample175 rejected; Phase 3B (over-extension pre-score) does not help on top of the guard.
+
+Next: Phase 3 DEEPEN = make the 4P objective production-complex (myopic my-net-minus-enemy-net under-values
+compounding production; competition replays show we plateau at 5-8 planets while one opponent snowballs to
+16-23). Change `score_candidates` in **orbit_lite_4p only** (2P untouched), build from sample173, same
+regression gates (random12 + fresh random + must keep the two rescue seeds; avoid sample174 over-tune and
+sample171 passivity).

@@ -1,0 +1,41 @@
+{
+  "candidate_id": "sample44_4p_script_portfolio_planner",
+  "parent": "sample36_4p_third_mode_lane_anchor",
+  "source_parts": [
+    "sample36 stable/s8/lane selector",
+    "sample43 winner_path component"
+  ],
+  "goal": "4P script portfolio planner focused on first-place routes",
+  "modes": [
+    "s7_stable",
+    "s8_burst",
+    "lane_anchor",
+    "winner_outer_domain",
+    "enemy_domain_block"
+  ],
+  "notes": "Single-package 4P selector. winner_outer_domain is intentionally gated tightly; enemy_domain_block denies neutral border targets near a rival outer cluster without broad leader attacks.",
+  "latest_local_result": {
+    "date": "2026-06-19",
+    "pool": "sample7 + sample8 + hairate5, seat0, 15 fixed seeds",
+    "seeds": [
+      2000000,
+      2000001,
+      2000002,
+      5421622,
+      5421623,
+      5421624,
+      56000000,
+      56000001,
+      56000002,
+      9874600000,
+      9874600001,
+      9874600002,
+      12000000,
+      12000001,
+      12000002
+    ],
+    "result": "11W / 0D / 4L",
+    "baseline_reference": "sample36 previously 10W / 1D / 4L on this pool",
+    "interpretation": "Narrow portfolio gates recovered a loss on 1661282750-style dense anchor starts without breaking the known 15-seed pool."
+  }
+}
